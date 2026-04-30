@@ -1,0 +1,14 @@
+# GameMaker build output & caches
+/_build/
+/_temp/
+/output/
+/cache/
+/_yyz/
+*.resource_lastexported
+
+# IDE / OS junk
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+desktop.ini
