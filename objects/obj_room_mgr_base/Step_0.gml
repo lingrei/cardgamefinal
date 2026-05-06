@@ -20,20 +20,27 @@ if (keyboard_check_pressed(vk_space)) {
         case "rm_rest":
         case "rm_event":
         case "rm_remove":  _mgr_advance_non_battle_node(); break;
-        case "rm_reward":  _mgr_advance_reward();          break;
-        case "rm_run_map": _mgr_advance_run_map_debug();   break;   // Phase 2c.run_map replaces with node click
+        case "rm_reward":  show_debug_message("[rm_reward] SPACE ignored; use CLAIM/SKIP"); break;
+        case "rm_run_map": show_debug_message("[rm_run_map] SPACE ignored; use the visible path nodes"); break;
     }
 }
 
-// Sprint 3 H3 fix: lane selection via A/B keys (rm_run_map + state=RUN_MAP_BRANCH)
+// Keyboard shortcut support for the two branch paths.
 if (_current_room_name == "rm_run_map" && obj_game.state == "RUN_MAP_BRANCH") {
     var _picked_lane = "";
     if (keyboard_check_pressed(ord("A"))) _picked_lane = "A";
     else if (keyboard_check_pressed(ord("B"))) _picked_lane = "B";
     if (_picked_lane != "") {
-        obj_game.current_branch_line = _picked_lane;
-        obj_game.current_branch_sub_index = 0;
-        _enter_current_node();
-        show_debug_message("[Sprint3 H3] Lane " + _picked_lane + " picked via keyboard (rm_run_map skeleton)");
+        if (obj_game.current_branch_line == "") {
+            obj_game.current_branch_line = _picked_lane;
+            obj_game.current_branch_sub_index = 0;
+            _enter_current_node();
+            show_debug_message("[rm_run_map] Path " + _picked_lane + " picked via keyboard");
+        } else if (obj_game.current_branch_line == _picked_lane) {
+            _enter_current_node();
+            show_debug_message("[rm_run_map] Path " + _picked_lane + " current sub-node entered via keyboard");
+        } else {
+            show_debug_message("[rm_run_map] Path " + _picked_lane + " ignored; locked to path " + obj_game.current_branch_line);
+        }
     }
 }

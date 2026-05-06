@@ -25,24 +25,24 @@ function _generate_branch(_id) {
         _generate_random_lane());
 }
 
-/// @desc Initialize/reset the 5-branch cache for the current run. Called from generate_default_run_map.
+/// @desc Initialize/reset the 6-branch cache for the current run. Called from generate_default_run_map.
 function generate_run_branches() {
     global.current_run_branches = {};
-    for (var i = 1; i <= 5; i++) {
+    for (var i = 1; i <= 6; i++) {
         var _id = "branch_" + string(i);
         global.current_run_branches[$ _id] = _generate_branch(_id);
     }
-    show_debug_message("[D61] generate_run_branches: 5 branches randomized (2 lane × 3 node each)");
+    show_debug_message("[D61] generate_run_branches: 6 branches randomized (2 lane x 3 node each)");
 }
 
-/// @desc Returns all 5 branches in order (must call generate_run_branches first).
+/// @desc Returns all 6 branches in order (must call generate_run_branches first).
 function get_all_branches() {
     if (!variable_global_exists("current_run_branches")) {
         show_debug_message("[WARN] get_all_branches called before generate_run_branches — returning empty");
         return [];
     }
     var _out = [];
-    for (var i = 1; i <= 5; i++) {
+    for (var i = 1; i <= 6; i++) {
         var _id = "branch_" + string(i);
         if (variable_struct_exists(global.current_run_branches, _id)) {
             array_push(_out, global.current_run_branches[$ _id]);

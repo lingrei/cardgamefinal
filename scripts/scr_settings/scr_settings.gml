@@ -1,13 +1,12 @@
-// scr_settings.gml — settings.ini persistence (D30 + D45 tutorial_done + D46 stage pool)
+// scr_settings.gml — settings.ini persistence.
 // Call settings_load() right after i18n_init() in obj_game Create.
 
 function settings_load() {
     ini_open("settings.ini");
 
-    var _lang = ini_read_string("general", "language", "zh");
+    var _lang = ini_read_string("general", "language", "en");
     _set_language(_lang);
 
-    global.tutorial_done = ini_read_real("general", "tutorial_done", 0) == 1;
     // Phase 1 Batch 5 (D1): added master_volume + fullscreen
     global.master_volume = ini_read_real("audio", "master_volume", 1.0);
     global.sfx_volume    = ini_read_real("audio", "sfx_volume", 1.0);
@@ -24,24 +23,11 @@ function settings_load() {
 function settings_save() {
     ini_open("settings.ini");
     ini_write_string("general", "language", global.current_language);
-    ini_write_real("general", "tutorial_done", global.tutorial_done ? 1 : 0);
     ini_write_real("general", "fullscreen", global.fullscreen ? 1 : 0);
     ini_write_real("audio", "master_volume", global.master_volume);
     ini_write_real("audio", "sfx_volume", global.sfx_volume);
     ini_write_real("audio", "music_volume", global.music_volume);
     ini_close();
-}
-
-/// @desc Mark tutorial as done and save. Call after first tutorial completion (D45).
-function settings_mark_tutorial_done() {
-    global.tutorial_done = true;
-    settings_save();
-}
-
-/// @desc Phase 1 Batch 5 (D1): clear tutorial_done flag and persist (TITLE → "Replay Tutorial").
-function settings_replay_tutorial() {
-    global.tutorial_done = false;
-    settings_save();
 }
 
 /// @desc Phase 1 Batch 5 (D1): apply master_volume to audio engine (audio_master_gain affects all sounds).

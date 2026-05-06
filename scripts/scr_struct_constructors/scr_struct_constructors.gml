@@ -1,4 +1,4 @@
-// Struct constructors for cards, rules, enemies, items, nodes, branches, run state, stages.
+// Struct constructors for cards, rules, enemies, relics, nodes, branches, run state, stages.
 // All config-level structs are pure data (json_stringify-safe, no instance references).
 // Runtime struct (RunStateStruct) may hold instance refs — not serializable.
 // Round 4 updates: D51 minimal naming (no name/desc on Item/Enemy/Card),
@@ -47,14 +47,25 @@ function ItemStruct(_id, _effect_type, _effect_params, _cost, _max_charges, _ico
     current_charges = _max_charges;
 }
 
-function StageStruct(_id, _rule_pool, _enemies, _rewards, _has_h1) constructor {
+function RelicStruct(_id, _display_text, _description_text, _icon_id, _route_tag, _cost) constructor {
+    id = _id;
+    display_text = _display_text;          // i18n key
+    description_text = _description_text;  // i18n key
+    icon_id = _icon_id;
+    route_tag = _route_tag;
+    cost = _cost;
+    pulse_timer = 0;                       // runtime UI feedback
+}
+
+function StageStruct(_id, _rule_pool, _enemies, _rewards, _has_h1, _mechanics) constructor {
     // D55: 多字段 reward 组合
-    // _rewards struct fields: gold, card_count, card_algorithm, item_count, item_source, upgrade_count
+    // _rewards struct fields: gold, card_count, card_algorithm, upgrade_count, relic_choice_count
     id = _id;
     rule_pool = _rule_pool;
     enemies = _enemies;
     rewards = _rewards;
     has_h1 = _has_h1;                // D59: enable H1 hidden draw
+    mechanics = _mechanics;          // MVP: { hand_limit_delta_both }
 }
 
 // Round 2 new: Run map nodes, branches, run state
@@ -87,7 +98,7 @@ function RunStateStruct() constructor {
 
     // Resources
     gold = 0;
-    items = [];
+    relics = [];
 
     // Deck (config layer)
     player_deck = [];

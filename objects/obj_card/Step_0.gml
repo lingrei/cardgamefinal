@@ -42,6 +42,14 @@ var _sw = sprite_get_width(spr_card_back);
 var _sh = sprite_get_height(spr_card_back);
 var _mouse_over = point_in_rectangle(mouse_x, mouse_y, x - _ox, y - _oy, x - _ox + _sw, y - _oy + _sh);
 
+if (obj_game.ui_drag_card == id) {
+    _update_player_card_drag(id);
+    if (!mouse_check_button(mb_left)) {
+        _finish_player_card_drag(id);
+    }
+    exit;
+}
+
 // Round 3: set tooltip target when hovered on face-up static card (and no overlay open)
 if (_mouse_over && flip_state == 0 && face_up && obj_game.ui_overlay_open == OV_NONE) {
     obj_game.ui_tooltip_target = id;
@@ -60,8 +68,21 @@ if (hoverable && _mouse_over) {
 // Round 3: block card click when any UI overlay is open
 if (obj_game.ui_overlay_open != OV_NONE) exit;
 
-// D60: peekable click path removed — peek now handled by item_use (scr_item_engine).
+if (_mouse_over
+    && mouse_check_button_pressed(mb_left)
+    && clickable
+    && obj_game.state == "PLAYER_WAIT"
+    && card_owner == "player"
+    && !obj_game.ui_select_card_mode) {
+    _begin_player_card_drag(id);
+    exit;
+}
+
 if (_mouse_over && mouse_check_button_pressed(mb_left) && clickable) {
+    if (obj_game.ui_active_discard_mode && obj_game.state == "PLAYER_WAIT" && card_owner == "player") {
+        _toggle_player_discard_mark(id);
+        exit;
+    }
     // Phase 1 Batch 4 (B3): if a "select card from hand" item is active, the click resolves
     // to that callback instead of normal selected_card targeting. Only applies to player hand
     // cards (clickable=true gates this — opp_hand has clickable=false).

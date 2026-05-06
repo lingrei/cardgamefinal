@@ -1,55 +1,111 @@
-// scr_config_stages.gml — Stage configs (D36 + D44 + D48 + D55 multi-field rewards).
-// Round 4 MVP: stage_tutorial + stage_1. Stage 2-6 in Round 5-6.
+// Seven-battle route stage configs. StageStruct is kept as the current engine
+// container; ids use level_bXX_* names from the design docs.
 
-function sample_stage_tutorial() {
-    // D44: HP 3 敌人 / deck 4R+4P 无 scissors / 词条池 = 3 条翻转克制 / 奖励 = 起始包
+function _reward(_gold, _card_count, _card_algo, _upgrade_count, _relic_choice_count) {
+    return {
+        gold: _gold,
+        card_count: _card_count,
+        card_algorithm: _card_algo,
+        upgrade_count: _upgrade_count,
+        relic_choice_count: _relic_choice_count
+    };
+}
+
+function level_b01_intro() {
     return new StageStruct(
-        "stage_tutorial",
-        ["beat_rock", "beat_paper", "beat_scissors"],   // rule_pool: 3 基础翻转克制 (起始包抽取池)
-        ["enemy_tutorial_dummy"],                         // enemies
-        {
-            // D55 multi-field reward: 起始包
-            gold:           0,
-            card_count:     0,
-            card_algorithm: "none",
-            item_count:     3,
-            item_source:    "starter_pack_peek", // 固定 3 × peek_opp_hand
-            upgrade_count:  1                      // 触发 1 次 Unified Upgrade UI
-        },
-        false  // has_h1 (tutorial 敌人简单, 不启用)
+        "level_b01_intro",
+        ["beat_rock", "beat_paper", "beat_scissors"],
+        ["enemy_b01_intro_dummy"],
+        _reward(0, 0, "none", 1, 0),
+        false,
+        { hand_limit_delta_both: 0 }
     );
 }
 
-function sample_stage_1() {
-    // D48: HP 5 / deck 3R+3P+3S 均等 / 0 词条 / AI 规则 F + H1
+function level_b02_default() {
     return new StageStruct(
-        "stage_1",
-        ["beat_rock", "beat_paper", "beat_scissors", "high_dmg_on_win", "tie_dmg"],  // 5 条低复杂度
-        ["enemy_stage1_scout"],
-        {
-            gold:           1,
-            card_count:     1,
-            card_algorithm: "basic_random_rsp_rule",
-            item_count:     0,
-            item_source:    "",
-            upgrade_count:  0
-        },
-        true   // has_h1: D59 enable H1 hidden draw algorithm
+        "level_b02_default",
+        ["beat_rock", "beat_paper", "beat_scissors", "high_dmg_on_win", "tie_dmg", "discard_peek_enemy", "draw_peek_enemy", "discard_draw_one"],
+        ["enemy_stage2_balanced"],
+        _reward(1, 1, "basic_random_rsp_rule", 0, 3),
+        true,
+        { hand_limit_delta_both: 0 }
     );
 }
 
-/// @desc Lookup stage by id. Returns undefined if not found.
+function level_b03_rock_trainer() {
+    return new StageStruct(
+        "level_b03_rock_trainer",
+        ["beat_rock", "beat_paper", "beat_scissors", "high_dmg_on_win", "tie_dmg", "return_to_deck", "return_to_deck_top"],
+        ["enemy_stage3_rock_trainer"],
+        _reward(1, 1, "basic_random_rsp_rule", 0, 0),
+        false,
+        { hand_limit_delta_both: 0 }
+    );
+}
+
+function level_b04_paper_hoarder() {
+    return new StageStruct(
+        "level_b04_paper_hoarder",
+        ["beat_rock", "beat_paper", "beat_scissors", "high_dmg_on_win", "tie_dmg", "boost_same_name_on_play", "same_type_fuel", "held_discard_peek_enemy"],
+        ["enemy_stage4_paper_hoarder"],
+        _reward(1, 1, "basic_random_rsp_rule", 0, 3),
+        false,
+        { hand_limit_delta_both: 1 }
+    );
+}
+
+function level_b05_default() {
+    return new StageStruct(
+        "level_b05_default",
+        ["discard_peek_enemy", "draw_peek_enemy", "discard_draw_one", "draw_chain_one", "held_start_peek_enemy", "held_refill_limit_plus_one", "held_win_damage_growth", "return_to_deck", "return_to_deck_top", "discard_to_topdeck"],
+        ["enemy_stage5_draw_keeper"],
+        _reward(2, 1, "basic_random_rsp_rule", 0, 0),
+        false,
+        { hand_limit_delta_both: 0 }
+    );
+}
+
+function level_b06_default() {
+    return new StageStruct(
+        "level_b06_default",
+        ["feed_on_prey", "shed_weakness", "same_type_fuel", "any_active_discard_growth", "held_random_trait", "boost_same_name_on_play", "high_dmg_on_win", "tie_dmg"],
+        ["enemy_stage6_discard_duelist"],
+        _reward(2, 1, "basic_random_rsp_rule", 1, 0),
+        false,
+        { hand_limit_delta_both: 0 }
+    );
+}
+
+function level_b07_final() {
+    return new StageStruct(
+        "level_b07_final",
+        _get_all_rule_ids(),
+        ["enemy_stage7_final"],
+        _reward(3, 1, "basic_random_rsp_rule", 1, 0),
+        true,
+        { hand_limit_delta_both: 1 }
+    );
+}
+
 function _get_stage_by_id(stage_id) {
     switch (stage_id) {
-        case "stage_tutorial": return sample_stage_tutorial();
-        case "stage_1":        return sample_stage_1();
+        case "level_b01_intro":
+        case "stage_1":                 return level_b01_intro();
+        case "level_b02_default":        return level_b02_default();
+        case "level_b03_rock_trainer":
+        case "stage_3":                 return level_b03_rock_trainer();
+        case "level_b04_paper_hoarder":
+        case "stage_4":                 return level_b04_paper_hoarder();
+        case "level_b05_default":        return level_b05_default();
+        case "level_b06_default":        return level_b06_default();
+        case "level_b07_final":          return level_b07_final();
     }
     return undefined;
 }
 
-/// @desc Pick a random enemy id from a stage's enemies pool.
 function _pick_enemy_from_stage(stage) {
     var _n = array_length(stage.enemies);
     if (_n == 0) return undefined;
-    return stage.enemies[irandom(_n - 1)];
+    return stage.enemies[0];
 }

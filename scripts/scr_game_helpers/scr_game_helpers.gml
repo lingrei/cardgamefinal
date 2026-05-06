@@ -30,6 +30,741 @@ function _int_to_card_type_str(_i) {
     return "";
 }
 
+function _card_type_name_from_instance(_card) {
+    if (_card == noone || !instance_exists(_card)) return "";
+    return _int_to_card_type_str(_card.card_type);
+}
+
+function _card_has_rule_id(_card, _rule_id) {
+    if (_card == noone || !instance_exists(_card)) return false;
+    for (var i = 0; i < array_length(_card.rules); i++) {
+        if (_card.rules[i].id == _rule_id) return true;
+    }
+    return false;
+}
+
+function _card_beats_type(_card, _target_type_name) {
+    if (_card == noone || !instance_exists(_card)) return false;
+    var _own = _card_type_name_from_instance(_card);
+    if (_own == "" || _target_type_name == "") return false;
+    if (_get_type_that_beats(_target_type_name) == _own) return true;
+    if (_card_has_rule_id(_card, "beat_" + _target_type_name)) return true;
+    return false;
+}
+
+function _enemy_rules_for_type(_enemy, _type_name) {
+    var _rules = [];
+    if (is_undefined(_enemy)) return _rules;
+    var _comp = _enemy.deck_composition;
+    if (!variable_struct_exists(_comp, "rules_by_type")) return _rules;
+
+    var _rules_by_type = _comp.rules_by_type;
+    if (!variable_struct_exists(_rules_by_type, _type_name)) return _rules;
+
+    var _ids = _rules_by_type[$ _type_name];
+    for (var i = 0; i < array_length(_ids); i++) {
+        var _tpl = _get_rule_template_by_id(_ids[i]);
+        if (!is_undefined(_tpl)) array_push(_rules, _tpl);
+    }
+    return _rules;
+}
+
+function _enemy_deck_card_structs(_enemy) {
+    var _cards = [];
+    if (is_undefined(_enemy)) return _cards;
+
+    var _comp = _enemy.deck_composition;
+    var _types = ["rock", "scissors", "paper"];
+    for (var t = 0; t < 3; t++) {
+        var _type_name = _types[t];
+        var _count = _comp[$ _type_name] ?? 0;
+        for (var c = 0; c < _count; c++) {
+            array_push(_cards, new CardStruct(_type_name, _enemy_rules_for_type(_enemy, _type_name)));
+        }
+    }
+    return _cards;
+}
+
+function _owner_hand_limit(_owner) {
+    var _base = (_owner == "player") ? obj_game.player_hand_limit : obj_game.opp_hand_limit;
+    var _bonus = 0;
+    for (var i = 0; i < obj_game.MAX_HAND_SLOTS; i++) {
+        var _card = (_owner == "player") ? obj_game.plr_hand[i] : obj_game.opp_hand[i];
+        if (_card == noone || !instance_exists(_card)) continue;
+        for (var r = 0; r < array_length(_card.rules); r++) {
+            var _rule = _card.rules[r];
+            if (_rule.effect_type == "hand_limit_bonus") {
+                _bonus += (_rule.effect_params[$ "amount"] ?? 1) * _rule.level;
+            }
+        }
+    }
+    return clamp(_base + _bonus, 1, obj_game.MAX_HAND_SLOTS);
+}
+
+function _get_hand_card(_owner, _slot) {
+    return (_owner == "player") ? obj_game.plr_hand[_slot] : obj_game.opp_hand[_slot];
+}
+
+function _set_hand_card(_owner, _slot, _card) {
+    if (_owner == "player") obj_game.plr_hand[_slot] = _card;
+    else obj_game.opp_hand[_slot] = _card;
+}
+
+function _clear_all_hand_slots() {
+    for (var i = 0; i < obj_game.MAX_HAND_SLOTS; i++) {
+        obj_game.opp_hand[i] = noone;
+        obj_game.plr_hand[i] = noone;
+    }
+}
+
+function _clear_hand_slot_for_card(_card) {
+    for (var i = 0; i < obj_game.MAX_HAND_SLOTS; i++) {
+        if (obj_game.opp_hand[i] == _card) obj_game.opp_hand[i] = noone;
+        if (obj_game.plr_hand[i] == _card) obj_game.plr_hand[i] = noone;
+    }
+}
+
+function _hand_missing_count(_owner) {
+    var _limit = _owner_hand_limit(_owner);
+    var _missing = 0;
+    for (var i = 0; i < _limit; i++) {
+        if (_get_hand_card(_owner, i) == noone) _missing++;
+    }
+    return _missing;
+}
+
+function _find_first_hand_card_slot(_owner) {
+    var _limit = _owner_hand_limit(_owner);
+    for (var i = 0; i < _limit; i++) {
+        if (_get_hand_card(_owner, i) != noone) return i;
+    }
+    return -1;
+}
+
+function _find_first_empty_player_slot() {
+    for (var i = 0; i < obj_game.player_hand_limit; i++) {
+        if (obj_game.plr_hand[i] == noone) return i;
+    }
+    return -1;
+}
+
+function _player_hand_card_count() {
+    var _count = 0;
+    for (var i = 0; i < obj_game.player_hand_limit; i++) {
+        if (obj_game.plr_hand[i] != noone) _count++;
+    }
+    return _count;
+}
+
+function _prepare_turn_start_hands() {
+    if (obj_game.turn_start_prepared) return;
+    obj_game.turn_start_prepared = true;
+    _relic_reset_turn_runtime();
+
+    obj_game.ui_active_discard_mode = false;
+    obj_game.selected_card = noone;
+    obj_game.ui_drag_card = noone;
+    obj_game.ui_drag_drop_target = "";
+
+    var _owners = ["opp", "player"];
+    for (var o = 0; o < 2; o++) {
+        var _owner = _owners[o];
+        var _limit = _owner_hand_limit(_owner);
+        for (var i = 0; i < obj_game.MAX_HAND_SLOTS; i++) {
+            var _card = _get_hand_card(_owner, i);
+            if (_card == noone) continue;
+            _card.marked_for_discard = false;
+            _card.active_discarded_this_turn = false;
+            _card.is_dragging = false;
+            if (i < _limit) {
+                _card.retained_from_previous_turn = true;
+                _card.drawn_this_turn = false;
+                _card.held_turns += 1;
+                _card.hoverable = false;
+                _card.clickable = false;
+            } else {
+                _set_hand_card(_owner, i, noone);
+            }
+        }
+    }
+
+    for (var o2 = 0; o2 < 2; o2++) {
+        var _owner2 = _owners[o2];
+        var _limit2 = _owner_hand_limit(_owner2);
+        for (var j = 0; j < _limit2; j++) {
+            var _held = _get_hand_card(_owner2, j);
+            if (_held == noone || !instance_exists(_held)) continue;
+            if (_held.held_turns <= 0) continue;
+            var _ctx = {
+                owner: _owner2,
+                source_card: _held,
+                trigger_reason: "while_held_turn_start",
+                rule_depth: 0
+            };
+            rule_apply_all(_held, "while_held_turn_start", _ctx);
+        }
+    }
+    _relic_on_turn_start_after_held();
+}
+
+function _apply_stage_mechanics(_stage) {
+    obj_game.player_hand_limit = obj_game.BASE_HAND_LIMIT;
+    obj_game.opp_hand_limit = obj_game.BASE_HAND_LIMIT;
+
+    if (!is_undefined(_stage) && variable_struct_exists(_stage, "mechanics")) {
+        var _m = _stage.mechanics;
+        if (variable_struct_exists(_m, "hand_limit_delta_both")) {
+            var _delta = _m.hand_limit_delta_both;
+            obj_game.player_hand_limit = clamp(obj_game.player_hand_limit + _delta, 1, obj_game.MAX_HAND_SLOTS);
+            obj_game.opp_hand_limit = clamp(obj_game.opp_hand_limit + _delta, 1, obj_game.MAX_HAND_SLOTS);
+        }
+    }
+}
+
+function _build_deal_queue() {
+    var _queue = [];
+    var _opp_available = array_length(obj_game.opp_draw_pile);
+    for (var i = 0; i < obj_game.opp_hand_limit; i++) {
+        if (obj_game.opp_hand[i] == noone && _opp_available > 0) {
+            array_push(_queue, { owner: "opp", slot: i });
+            _opp_available--;
+        }
+    }
+
+    var _plr_available = array_length(obj_game.player_draw_pile);
+    for (var j = 0; j < obj_game.player_hand_limit; j++) {
+        if (obj_game.plr_hand[j] == noone && _plr_available > 0) {
+            array_push(_queue, { owner: "player", slot: j });
+            _plr_available--;
+        }
+    }
+    return _queue;
+}
+
+function _deal_one_card_to_slot(_owner, _slot, _depth_step) {
+    if (_get_hand_card(_owner, _slot) != noone) return false;
+    var _pile = (_owner == "player") ? obj_game.player_draw_pile : obj_game.opp_draw_pile;
+    if (array_length(_pile) == 0) return false;
+
+    var _last = array_length(_pile) - 1;
+    var _card = _pile[_last];
+    array_delete(_pile, _last, 1);
+    if (_owner == "player") obj_game.player_draw_pile = _pile;
+    else obj_game.opp_draw_pile = _pile;
+
+    _set_hand_card(_owner, _slot, _card);
+    _card.target_x = obj_game.HAND_X[_slot];
+    _card.target_y = (_owner == "player") ? obj_game.PLR_HAND_Y : obj_game.OPP_HAND_Y;
+    _card.target_rotation = 0;
+    _card.is_moving = true;
+    _card.move_speed = 0.15;
+    _card.depth = -50 - _depth_step;
+    _card.drawn_this_turn = true;
+    _card.retained_from_previous_turn = false;
+    _card.held_turns = 0;
+    _card.marked_for_discard = false;
+    _card.active_discarded_this_turn = false;
+    _card.hoverable = false;
+    _card.clickable = false;
+    var _ctx = {
+        owner: _owner,
+        source_card: _card,
+        trigger_reason: "on_draw",
+        rule_depth: 0
+    };
+    rule_apply_all(_card, "on_draw", _ctx);
+    return true;
+}
+
+function _draw_one_to_hand(_owner) {
+    var _slot = -1;
+    var _limit = _owner_hand_limit(_owner);
+    for (var i = 0; i < _limit; i++) {
+        if (_get_hand_card(_owner, i) == noone) {
+            _slot = i;
+            break;
+        }
+    }
+    if (_slot < 0) return false;
+
+    var _pile = (_owner == "player") ? obj_game.player_draw_pile : obj_game.opp_draw_pile;
+    var _discard = (_owner == "player") ? obj_game.player_discard_pile : obj_game.opp_discard_pile;
+    if (array_length(_pile) == 0 && array_length(_discard) > 0) {
+        while (array_length(_discard) > 0) {
+            var _last_d = array_length(_discard) - 1;
+            var _dc = _discard[_last_d];
+            array_delete(_discard, _last_d, 1);
+            array_push(_pile, _dc);
+        }
+        if (_owner == "player") {
+            obj_game.player_draw_pile = _pile;
+            obj_game.player_discard_pile = _discard;
+        } else {
+            obj_game.opp_draw_pile = _pile;
+            obj_game.opp_discard_pile = _discard;
+        }
+        _shuffle_pile_by_owner(_owner);
+    }
+    if (array_length((_owner == "player") ? obj_game.player_draw_pile : obj_game.opp_draw_pile) == 0) return false;
+    var _ok = _deal_one_card_to_slot(_owner, _slot, 20 + _slot);
+    if (_ok && _owner == "player" && obj_game.state == "PLAYER_WAIT") {
+        var _drawn = _get_hand_card("player", _slot);
+        if (_drawn != noone && instance_exists(_drawn)) {
+            if (!_drawn.face_up) {
+                _drawn.flip_state = 1;
+                _drawn.flip_to_face = true;
+                _play_battle_sfx("card_flip");
+            }
+            _drawn.hoverable = true;
+            _drawn.clickable = true;
+        }
+    }
+    return _ok;
+}
+
+function _move_card_to_draw_pile_top(_card, _public_reveal) {
+    if (_card == noone || !instance_exists(_card)) return;
+    if (_public_reveal && !_card.face_up) {
+        _card.flip_state = 1;
+        _card.flip_to_face = true;
+    }
+    _clear_hand_slot_for_card(_card);
+    if (_card == obj_game.opp_play) obj_game.opp_play = noone;
+    if (_card == obj_game.plr_play) obj_game.plr_play = noone;
+
+    var _owner = _card.card_owner;
+    var _pile = (_owner == "player") ? obj_game.player_draw_pile : obj_game.opp_draw_pile;
+    var _pile_idx = array_length(_pile);
+    array_push(_pile, _card); // draw top is the array end.
+    if (_owner == "player") obj_game.player_draw_pile = _pile;
+    else obj_game.opp_draw_pile = _pile;
+
+    var _draw_y = (_owner == "player") ? obj_game.PLR_DRAW_Y : obj_game.OPP_DRAW_Y;
+    _card.target_x = obj_game.DRAW_X;
+    _card.target_y = _draw_y - _pile_idx * obj_game.PILE_OFFSET;
+    _card.target_rotation = 0;
+    _card.is_moving = true;
+    _card.move_speed = 0.18;
+    _card.depth = 50 - _pile_idx;
+    _card.hoverable = false;
+    _card.clickable = false;
+    if (_card.face_up && !_card.is_peek_revealed) {
+        _card.flip_state = 1;
+        _card.flip_to_face = false;
+    }
+    _play_battle_sfx("shuffle");
+}
+
+function _move_card_to_draw_pile_random(_card, _public_reveal) {
+    if (_card == noone || !instance_exists(_card)) return;
+    _clear_hand_slot_for_card(_card);
+    if (_card == obj_game.opp_play) obj_game.opp_play = noone;
+    if (_card == obj_game.plr_play) obj_game.plr_play = noone;
+
+    var _owner = _card.card_owner;
+    var _pile = (_owner == "player") ? obj_game.player_draw_pile : obj_game.opp_draw_pile;
+    var _insert = irandom(array_length(_pile));
+    if (_insert >= array_length(_pile)) array_push(_pile, _card);
+    else array_insert(_pile, _insert, _card);
+    if (_owner == "player") obj_game.player_draw_pile = _pile;
+    else obj_game.opp_draw_pile = _pile;
+
+    var _draw_y = (_owner == "player") ? obj_game.PLR_DRAW_Y : obj_game.OPP_DRAW_Y;
+    for (var i = 0; i < array_length(_pile); i++) {
+        var _c = _pile[i];
+        if (!instance_exists(_c)) continue;
+        _c.target_x = obj_game.DRAW_X;
+        _c.target_y = _draw_y - i * obj_game.PILE_OFFSET;
+        _c.target_rotation = 0;
+        _c.depth = 50 - i;
+        _c.is_moving = true;
+        _c.move_speed = 0.18;
+        _c.hoverable = false;
+        _c.clickable = false;
+        if (_c.face_up && !_c.is_peek_revealed) {
+            _c.flip_state = 1;
+            _c.flip_to_face = false;
+        }
+    }
+    _play_battle_sfx("shuffle");
+}
+
+function _peek_enemy_hand(_owner) {
+    var _target_owner = (_owner == "player") ? "opp" : "player";
+    var _limit = _owner_hand_limit(_target_owner);
+    var _candidates = [];
+    for (var i = 0; i < _limit; i++) {
+        var _c = _get_hand_card(_target_owner, i);
+        if (_c != noone && instance_exists(_c) && !_c.face_up && !_c.is_peek_revealed) {
+            array_push(_candidates, _c);
+        }
+    }
+    if (_target_owner == "opp" && obj_game.opp_play != noone && !obj_game.opp_play.face_up && !obj_game.opp_play.is_peek_revealed) {
+        array_push(_candidates, obj_game.opp_play);
+    }
+    if (_target_owner == "player" && obj_game.plr_play != noone && !obj_game.plr_play.face_up && !obj_game.plr_play.is_peek_revealed) {
+        array_push(_candidates, obj_game.plr_play);
+    }
+    if (array_length(_candidates) == 0) return false;
+    var _target = _candidates[irandom(array_length(_candidates) - 1)];
+    _target.is_peek_revealed = true;
+    _target.flip_state = 1;
+    _target.flip_to_face = true;
+    _target.ui_pulse_timer = 26;
+    if (_owner == "player") _relic_on_peek_enemy();
+    _play_sfx(snd_peek);
+    return true;
+}
+
+function _add_random_trait_to_instance(_card) {
+    if (_card == noone || !instance_exists(_card)) return false;
+    var _pool = _get_random_trait_pool();
+    var _legal = [];
+    for (var i = 0; i < array_length(_pool); i++) {
+        var _tpl = _get_rule_template_by_id(_pool[i]);
+        if (!is_undefined(_tpl) && _is_legal_target(_tpl, _card)) array_push(_legal, _tpl);
+    }
+    if (array_length(_legal) == 0) return false;
+    var _picked = variable_clone(_legal[irandom(array_length(_legal) - 1)], 10);
+    array_push(_card.rules, _picked);
+    show_debug_message("[trait] random gained " + _picked.id);
+    return true;
+}
+
+function _apply_active_discard_effects(_card) {
+    if (_card == noone || !instance_exists(_card)) return;
+    var _owner = _card.card_owner;
+    var _ctx_self = {
+        owner: _owner,
+        source_card: _card,
+        discarded_card: _card,
+        trigger_reason: "on_active_discard",
+        rule_depth: 0
+    };
+    rule_apply_all(_card, "on_active_discard", _ctx_self);
+
+    var _limit = _owner_hand_limit(_owner);
+    for (var i = 0; i < _limit; i++) {
+        var _held = _get_hand_card(_owner, i);
+        if (_held == noone || !instance_exists(_held) || _held == _card) continue;
+        var _ctx_held = {
+            owner: _owner,
+            source_card: _held,
+            discarded_card: _card,
+            trigger_reason: "held_on_owner_active_discard",
+            rule_depth: 0
+        };
+        rule_apply_all(_held, "held_on_owner_active_discard", _ctx_held);
+    }
+
+    var _owners = ["player", "opp"];
+    for (var o = 0; o < 2; o++) {
+        var _obs_owner = _owners[o];
+        var _obs_limit = _owner_hand_limit(_obs_owner);
+        for (var j = 0; j < _obs_limit; j++) {
+            var _obs = _get_hand_card(_obs_owner, j);
+            if (_obs == noone || !instance_exists(_obs) || _obs == _card) continue;
+            var _ctx_any = {
+                owner: _obs_owner,
+                source_card: _obs,
+                discarded_card: _card,
+                trigger_reason: "on_any_active_discard",
+                rule_depth: 0
+            };
+            rule_apply_all(_obs, "on_any_active_discard", _ctx_any);
+        }
+    }
+
+    _relic_on_active_discard(_card, _owner);
+}
+
+function _move_card_to_discard_pile(_card, _public_reveal) {
+    if (_card == noone || !instance_exists(_card)) return;
+
+    if (obj_game.ui_drag_card == _card) {
+        obj_game.ui_drag_card = noone;
+        obj_game.ui_drag_drop_target = "";
+    }
+    _card.is_dragging = false;
+
+    if (_public_reveal && !_card.face_up) {
+        _card.flip_state = 1;
+        _card.flip_to_face = true;
+    }
+    _card.is_peek_revealed = false;
+    _card.marked_for_discard = false;
+    _card.active_discarded_this_turn = true;
+    _card.discard_route_override = "";
+
+    if (_card == obj_game.opp_play) obj_game.opp_play = noone;
+    if (_card == obj_game.plr_play) obj_game.plr_play = noone;
+    _clear_hand_slot_for_card(_card);
+
+    _apply_active_discard_effects(_card);
+
+    if (_card.discard_route_override == "draw_top") {
+        _move_card_to_draw_pile_top(_card, _public_reveal);
+        return;
+    }
+
+    var _pile_idx = 0;
+    if (_card.card_owner == "player") {
+        _pile_idx = array_length(obj_game.player_discard_pile);
+        array_push(obj_game.player_discard_pile, _card);
+    } else {
+        _pile_idx = array_length(obj_game.opp_discard_pile);
+        array_push(obj_game.opp_discard_pile, _card);
+    }
+
+    var _disc_y = (_card.card_owner == "player") ? obj_game.PLR_DISCARD_Y : obj_game.OPP_DISCARD_Y;
+    _card.target_x = obj_game.DISCARD_X + irandom_range(-18, 18);
+    _card.target_y = _disc_y - _pile_idx * obj_game.PILE_OFFSET + irandom_range(-10, 10);
+    _card.target_rotation = irandom_range(-12, 12);
+    _card.is_moving = true;
+    _card.move_speed = 0.15;
+    _card.depth = 50 - _pile_idx;
+    _card.hoverable = false;
+    _card.clickable = false;
+    _play_battle_sfx("card_drop_discard");
+}
+
+function _player_play_drop_rect() {
+    return {
+        x: obj_game.PLR_PLAY_X - 18,
+        y: obj_game.PLR_PLAY_Y - 18,
+        w: 136,
+        h: 176
+    };
+}
+
+function _player_discard_drop_rect() {
+    return {
+        x: obj_game.DISCARD_X - 12,
+        y: obj_game.PLR_DISCARD_Y - 12,
+        w: 124,
+        h: 164
+    };
+}
+
+function _point_in_rect_struct(_r, _px, _py) {
+    return point_in_rectangle(_px, _py, _r.x, _r.y, _r.x + _r.w, _r.y + _r.h);
+}
+
+function _player_drag_drop_target() {
+    var _play_r = _player_play_drop_rect();
+    if (_point_in_rect_struct(_play_r, mouse_x, mouse_y)) return "play";
+
+    var _discard_r = _player_discard_drop_rect();
+    if (_point_in_rect_struct(_discard_r, mouse_x, mouse_y)) {
+        return (_player_hand_card_count() > 1) ? "discard" : "discard_blocked";
+    }
+    return "";
+}
+
+function _begin_player_card_drag(_card) {
+    if (_card == noone || !instance_exists(_card)) return;
+    if (obj_game.state != "PLAYER_WAIT") return;
+    if (obj_game.ui_select_card_mode) return;
+    if (!_is_player_hand_card(_card)) return;
+
+    obj_game.selected_card = noone;
+    obj_game.ui_active_discard_mode = false;
+    obj_game.ui_drag_card = _card;
+    obj_game.ui_drag_drop_target = "";
+
+    _card.is_dragging = true;
+    _card.drag_offset_x = mouse_x - _card.x;
+    _card.drag_offset_y = mouse_y - _card.y;
+    _card.drag_return_x = _card.x;
+    _card.drag_return_y = _card.y;
+    _card.drag_return_rotation = _card.target_rotation;
+    _card.is_moving = false;
+    _card.target_rotation = 0;
+    _card.depth = -200;
+    _card.hoverable = false;
+    _play_battle_sfx("card_drag_start");
+}
+
+function _update_player_card_drag(_card) {
+    if (_card == noone || !instance_exists(_card)) return;
+    _card.x = mouse_x - _card.drag_offset_x;
+    _card.y = mouse_y - _card.drag_offset_y;
+    _card.target_x = _card.x;
+    _card.target_y = _card.y;
+    _card.target_rotation = 0;
+    _card.current_rotation = lerp(_card.current_rotation, 0, 0.35);
+    _card.hover_offset = 0;
+    _card.depth = -200;
+    obj_game.ui_drag_drop_target = _player_drag_drop_target();
+}
+
+function _return_dragged_card_to_hand(_card) {
+    if (_card == noone || !instance_exists(_card)) return;
+    _card.target_x = _card.drag_return_x;
+    _card.target_y = _card.drag_return_y;
+    _card.target_rotation = _card.drag_return_rotation;
+    _card.is_moving = true;
+    _card.move_speed = 0.22;
+    _card.hoverable = true;
+    _card.clickable = true;
+    _play_battle_sfx("card_drop_return");
+}
+
+function _finish_player_card_drag(_card) {
+    if (_card == noone || !instance_exists(_card)) return;
+    var _target = obj_game.ui_drag_drop_target;
+    if (_target == "") _target = _player_drag_drop_target();
+
+    obj_game.ui_drag_card = noone;
+    obj_game.ui_drag_drop_target = "";
+    _card.is_dragging = false;
+
+    switch (_target) {
+        case "play":
+            show_debug_message("[drag] player card dropped to PLAY");
+            _player_commit_play(_card);
+            return;
+        case "discard":
+            show_debug_message("[drag] player card dropped to DISCARD");
+            _move_card_to_discard_pile(_card, true);
+            return;
+        case "discard_blocked":
+            show_debug_message("[drag] discard refused: player must keep one card to play");
+            _return_dragged_card_to_hand(_card);
+            return;
+    }
+
+    _return_dragged_card_to_hand(_card);
+}
+
+function _disable_hand_input(_owner) {
+    var _limit = _owner_hand_limit(_owner);
+    for (var i = 0; i < _limit; i++) {
+        var _card = _get_hand_card(_owner, i);
+        if (_card != noone) {
+            _card.hoverable = false;
+            _card.clickable = false;
+        }
+    }
+}
+
+function _apply_card_on_play(_card, _owner, _opponent_card) {
+    if (_card == noone) return;
+    var _ctx = {
+        owner: _owner,
+        source_card: _card,
+        opponent_card: _opponent_card,
+        trigger_reason: "on_play",
+        rule_depth: 0
+    };
+    rule_apply_all(_card, "on_play", _ctx);
+}
+
+function _get_card_win_damage(_card) {
+    if (_card == noone) return 1;
+    return 1 + max(0, _card.win_damage_bonus);
+}
+
+function _run_battle_total() {
+    var _total = 0;
+    for (var i = 0; i < array_length(obj_game.map); i++) {
+        if (obj_game.map[i].type == "battle") _total++;
+    }
+    return max(1, _total);
+}
+
+function _opp_commit_play_slot(_slot) {
+    if (_slot < 0 || _slot >= obj_game.opp_hand_limit) return false;
+    var _card = obj_game.opp_hand[_slot];
+    if (_card == noone) return false;
+
+    show_debug_message("[qa] opp_commit stage=" + obj_game.current_stage_id
+        + " slot=" + string(_slot)
+        + " type=" + _int_to_card_type_str(_card.card_type)
+        + " dmg=" + string(_get_card_win_damage(_card)));
+
+    obj_game.opp_play = _card;
+    obj_game.opp_hand[_slot] = noone;
+    _card.target_x = obj_game.OPP_PLAY_X;
+    _card.target_y = obj_game.OPP_PLAY_Y;
+    _card.target_rotation = 0;
+    _card.is_moving = true;
+    _card.move_speed = 0.10;
+    _card.depth = -60;
+    _card.hoverable = false;
+    _card.clickable = false;
+    _play_battle_sfx("card_land_play");
+    _apply_card_on_play(_card, "opp", obj_game.plr_play);
+    return true;
+}
+
+function _opp_commit_plan(_play_slot, _discard_slots) {
+    for (var i = 0; i < array_length(_discard_slots); i++) {
+        var _slot = _discard_slots[i];
+        if (_slot == _play_slot) continue;
+        if (_slot >= 0 && _slot < obj_game.opp_hand_limit && obj_game.opp_hand[_slot] != noone) {
+            _move_card_to_discard_pile(obj_game.opp_hand[_slot], true);
+        }
+    }
+    return _opp_commit_play_slot(_play_slot);
+}
+
+function _ai_first_slot_of_type(_type_int) {
+    for (var i = 0; i < obj_game.opp_hand_limit; i++) {
+        if (obj_game.opp_hand[i] != noone && obj_game.opp_hand[i].card_type == _type_int) return i;
+    }
+    return -1;
+}
+
+function _ai_highest_damage_slot_from_slots(_slots) {
+    var _best = -1;
+    var _best_bonus = -100000;
+    for (var i = 0; i < array_length(_slots); i++) {
+        var _slot = _slots[i];
+        var _card = obj_game.opp_hand[_slot];
+        if (_card == noone) continue;
+        var _bonus = _card.win_damage_bonus;
+        if (_best < 0 || _bonus > _best_bonus || (_bonus == _best_bonus && _slot < _best)) {
+            _best = _slot;
+            _best_bonus = _bonus;
+        }
+    }
+    return _best;
+}
+
+function _ai_stage3_pick_slot() {
+    var _rock = _ai_first_slot_of_type(0);
+    if (_rock >= 0) return _rock;
+    return _find_first_hand_card_slot("opp");
+}
+
+function _ai_stage4_pick_slot_and_discards() {
+    var _paper_slots = [];
+    var _non_paper_slots = [];
+    for (var i = 0; i < obj_game.opp_hand_limit; i++) {
+        var _card = obj_game.opp_hand[i];
+        if (_card == noone) continue;
+        if (_card.card_type == 2) array_push(_paper_slots, i);
+        else array_push(_non_paper_slots, i);
+    }
+
+    var _play_slot = -1;
+    if (array_length(_paper_slots) >= 3) {
+        _play_slot = _ai_highest_damage_slot_from_slots(_paper_slots);
+    } else if (array_length(_non_paper_slots) > 0) {
+        _play_slot = _non_paper_slots[0];
+    } else {
+        _play_slot = _ai_highest_damage_slot_from_slots(_paper_slots);
+    }
+
+    var _discard_slots = [];
+    for (var j = 0; j < array_length(_non_paper_slots); j++) {
+        var _slot = _non_paper_slots[j];
+        if (_slot != _play_slot) array_push(_discard_slots, _slot);
+    }
+    return { play_slot: _play_slot, discard_slots: _discard_slots };
+}
+
 /// @desc D48/D58 AI rule F: "after losing, play the type that beats player's last play".
 /// Returns opp_hand slot index (0-2) to play, or -1 if no match (caller should fallback random).
 /// @param _last_type String — player's last play type ("rock"|"scissors"|"paper"|"")
@@ -38,13 +773,13 @@ function _ai_stage1_f_pick(_last_type, _player_won_last) {
     if (!_player_won_last || _last_type == "") return -1;
     var _target_int = _str_to_card_type_int(_get_type_that_beats(_last_type));
     var _matches = [];
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < obj_game.opp_hand_limit; i++) {
         if (obj_game.opp_hand[i] != noone && obj_game.opp_hand[i].card_type == _target_int) {
             array_push(_matches, i);
         }
     }
     if (array_length(_matches) == 0) return -1;
-    return _matches[irandom(array_length(_matches) - 1)];
+    return _matches[0];
 }
 
 /// @desc D48/D59 H1 hidden draw algorithm: swap opp hand cards with draw pile to guarantee
@@ -54,7 +789,8 @@ function _ai_h1_check_and_fix() {
     if (!obj_game.current_stage_has_h1) return;
 
     var _counts = { rock: 0, scissors: 0, paper: 0 };
-    for (var i = 0; i < 3; i++) {
+    var _limit = obj_game.opp_hand_limit;
+    for (var i = 0; i < _limit; i++) {
         if (obj_game.opp_hand[i] == noone) continue;
         var _type = _int_to_card_type_str(obj_game.opp_hand[i].card_type);
         _counts[$ _type] += 1;
@@ -80,7 +816,7 @@ function _ai_h1_check_and_fix() {
         if (_found_idx < 0) continue; // Sprint 2: no reshuffle fallback yet
 
         var _swap_slot = -1;
-        for (var i = 0; i < 3; i++) {
+        for (var i = 0; i < _limit; i++) {
             if (obj_game.opp_hand[i] == noone) continue;
             var _hand_type = _int_to_card_type_str(obj_game.opp_hand[i].card_type);
             if (_counts[$ _hand_type] > 1) {
@@ -96,7 +832,7 @@ function _ai_h1_check_and_fix() {
         var _new = obj_game.opp_draw_pile[_found_idx];
 
         array_delete(obj_game.opp_draw_pile, _found_idx, 1);
-        array_insert(obj_game.opp_draw_pile, irandom(array_length(obj_game.opp_draw_pile)), _old);
+        array_insert(obj_game.opp_draw_pile, 0, _old);
         obj_game.opp_hand[_swap_slot] = _new;
 
         // New card teleports to hand slot (H1 is invisible — cards are face-down)
@@ -173,7 +909,18 @@ function _instantiate_opp_draw_pile(_enemy) {
         var _type_name = _types[t];
         var _count = _comp[$ _type_name] ?? 0;
         for (var c = 0; c < _count; c++) {
-            var _struct = new CardStruct(_type_name, []);
+            var _rules = [];
+            if (variable_struct_exists(_comp, "rules_by_type")) {
+                var _rules_by_type = _comp.rules_by_type;
+                if (variable_struct_exists(_rules_by_type, _type_name)) {
+                    var _ids = _rules_by_type[$ _type_name];
+                    for (var r = 0; r < array_length(_ids); r++) {
+                        var _tpl = _get_rule_template_by_id(_ids[r]);
+                        if (!is_undefined(_tpl)) array_push(_rules, _tpl);
+                    }
+                }
+            }
+            var _struct = new CardStruct(_type_name, _rules);
             var _x = obj_game.DRAW_X;
             var _y = obj_game.OPP_DRAW_Y - _counter * obj_game.PILE_OFFSET;   // Sprint 3 Phase 2b.2: opp pile top
             var _inst = _instantiate_card_from_struct(_struct, _x, _y, "opp");
@@ -235,36 +982,35 @@ function _sprint2_self_test() {
     else { _failed++; show_debug_message("[FAIL T2] RPS beats cycle"); }
 
     // T3: stage lookup returns non-undefined for known ids + required fields present
-    var _stg_t = _get_stage_by_id("stage_tutorial");
     var _stg_1 = _get_stage_by_id("stage_1");
-    var _t3 = !is_undefined(_stg_t) && !is_undefined(_stg_1)
+    var _stg_7 = _get_stage_by_id("level_b07_final");
+    var _t3 = !is_undefined(_stg_1) && !is_undefined(_stg_7)
           && variable_struct_exists(_stg_1, "rewards")
           && variable_struct_exists(_stg_1, "has_h1")
           && variable_struct_exists(_stg_1, "rule_pool")
-          && _stg_1.has_h1 == true
-          && _stg_t.has_h1 == false;
+          && _stg_1.has_h1 == false
+          && _stg_7.has_h1 == true;
     if (_t3) { _passed++; show_debug_message("[PASS T3] stage config integrity (D55/D59)"); }
     else { _failed++; show_debug_message("[FAIL T3] stage config integrity"); }
 
     // T4: enemy template lookup + D54 no-name schema + ai_params.type present
-    var _e1 = _get_enemy_template_by_id("enemy_stage1_scout");
-    var _et = _get_enemy_template_by_id("enemy_tutorial_dummy");
-    var _t4 = !is_undefined(_e1) && !is_undefined(_et)
-          && _e1.max_hp == 5 && _et.max_hp == 3
-          && _e1.ai_params.type == "stage1_f"
-          && _et.ai_params.type == "random"
+    var _e1 = _get_enemy_template_by_id("enemy_b01_intro_dummy");
+    var _e7 = _get_enemy_template_by_id("enemy_stage7_final");
+    var _t4 = !is_undefined(_e1) && !is_undefined(_e7)
+          && _e1.max_hp == 3 && _e7.max_hp == 10
+          && _e1.ai_params.type == "fixed_first"
+          && _e7.ai_params.type == "stage1_f"
           && !variable_struct_exists(_e1, "name");  // D54: no name field
     if (_t4) { _passed++; show_debug_message("[PASS T4] enemy config integrity (D54/D58)"); }
     else { _failed++; show_debug_message("[FAIL T4] enemy config integrity"); }
 
-    // T5: item template lookup + D51 no-name schema + cost field present
-    var _item = _get_item_template_by_id("item_peek_opp_hand");
-    var _t5 = !is_undefined(_item)
-          && variable_struct_exists(_item, "cost")
-          && variable_struct_exists(_item, "description_text")
-          && !variable_struct_exists(_item, "name");
-    if (_t5) { _passed++; show_debug_message("[PASS T5] item config integrity (D51)"); }
-    else { _failed++; show_debug_message("[FAIL T5] item config integrity"); }
+    // T5: relic template lookup
+    var _relic = _get_relic_template_by_id("shuffle_funnel");
+    var _t5 = !is_undefined(_relic)
+          && variable_struct_exists(_relic, "cost")
+          && variable_struct_exists(_relic, "description_text");
+    if (_t5) { _passed++; show_debug_message("[PASS T5] relic config"); }
+    else { _failed++; show_debug_message("[FAIL T5] relic config"); }
 
     // T6: rule lookup + cost present + D51 minimal schema (no name)
     var _rule = _get_rule_template_by_id("high_dmg_on_win");
@@ -284,12 +1030,14 @@ function _sprint2_self_test() {
     if (_t7) { _passed++; show_debug_message("[PASS T7] implicit rule matrix (D39)"); }
     else { _failed++; show_debug_message("[FAIL T7] implicit rule matrix"); }
 
-    // T8: stage_1 rule_pool contains expected 5 rules (basic RPS + high_dmg_on_win + tie_dmg)
+    // T8: stage_1 rule_pool contains the basic RPS teaching rules.
     var _rp = _stg_1.rule_pool;
-    var _t8 = array_length(_rp) == 5
-          && (array_contains(_rp, "beat_rock") || array_length(_rp) == 5);  // minimal check
-    if (_t8) { _passed++; show_debug_message("[PASS T8] stage_1 rule_pool size=5"); }
-    else { _failed++; show_debug_message("[FAIL T8] stage_1 rule_pool size != 5"); }
+    var _t8 = array_length(_rp) == 3
+          && array_contains(_rp, "beat_rock")
+          && array_contains(_rp, "beat_paper")
+          && array_contains(_rp, "beat_scissors");
+    if (_t8) { _passed++; show_debug_message("[PASS T8] stage_1 basic rule_pool"); }
+    else { _failed++; show_debug_message("[FAIL T8] stage_1 basic rule_pool broken"); }
 
     // T9: i18n dictionary has core keys (requires i18n_init() to have run before Create)
     var _t9 = (_t("ui_duel") != "ui_duel") && (_t("ui_battle") != "ui_battle" || _t("ui_duel") != "ui_duel");
@@ -318,9 +1066,9 @@ function _mgr_advance_non_battle_node() {
         obj_game.map_position += 1;
         obj_game.current_branch_line = "";
         obj_game.current_branch_sub_index = 0;
-        obj_game.state = "BATTLE_START";
-        obj_game.wait_timer = 10;
-        room_goto(room0);   // room0 = legacy battle room name
+        obj_game.state = "RUN_MAP";
+        obj_game.wait_timer = 0;
+        room_goto(rm_run_map);
     } else {
         room_goto(rm_run_map);
     }
@@ -473,36 +1221,6 @@ function _sample_rules_from_pool(_stage, _n) {
     return _out;
 }
 
-/// @desc Sprint 3 Phase 3 starter pack (D45): every RUN_START 交付 3 peek items + 1 upgrade
-/// (抽取池 = stage_tutorial.rule_pool). Returns true if upgrade triggered (caller must room_goto to rm_upgrade).
-/// MVP: 每 run 都跑 (不走 tutorial 作为独立 battle — Tutorial 作为 rule_pool 来源). 后续 Phase 4
-/// 可添加 Tutorial 作为独立可 skip 的 first-time battle.
-function _apply_starter_pack() {
-    // 1. Add 3 peek items to items bar (respecting 4-slot limit)
-    for (var i = 0; i < 3; i++) {
-        var _tpl = _get_item_template_by_id("peek_opp_hand");
-        _add_item_to_inventory(_tpl);   // helper handles 4-slot cap + stacking
-    }
-
-    // 2. Trigger upgrade UI with 3 candidates from tutorial pool
-    var _tut_stage = _get_stage_by_id("stage_tutorial");
-    var _candidates = _sample_rules_from_pool(_tut_stage, 3);
-    if (array_length(_candidates) == 0) {
-        show_debug_message("[starter_pack] no rules in stage_tutorial pool — skip upgrade");
-        return false;
-    }
-
-    obj_game.upgrade_context = {
-        candidates: _candidates,
-        source: "starter",
-        return_room: room0,
-        pending_gold_deduct: 0,
-        shop_slot_idx: -1
-    };
-    show_debug_message("[starter_pack] 3 peek items + " + string(array_length(_candidates)) + " upgrade candidates");
-    return true;
-}
-
 /// @desc Sprint 3 Phase 2d: finalize upgrade (CONFIRM or CANCEL) and advance per source.
 /// Called by obj_upgrade_mgr on CONFIRM/CANCEL button or ESC. _apply=true → apply rule + deduct gold
 /// (for shop); _apply=false → skip apply (CANCEL). Both paths advance via source-specific helper.
@@ -537,22 +1255,14 @@ function _upgrade_finalize(_apply) {
         case "event_d":
             _mgr_advance_non_battle_node();
             break;
-        case "starter":
-            // Phase 3.tutorial (D28): if this starter upgrade was triggered by tutorial completion
-            // (rm_reward CLAIM for stage_tutorial), mark tutorial_done + return to TITLE.
+        case "reward":
+            _mgr_advance_reward();
+            break;
+        case "starter_unused":
             // Else (starter at RUN_START of a regular run) → proceed to first battle.
-            if (obj_game.is_tutorial_run) {
-                settings_mark_tutorial_done();
-                obj_game.is_tutorial_run = false;
-                obj_game.state = "TITLE";
-                obj_game.wait_timer = 10;
-                show_debug_message("[tutorial] Complete → tutorial_done=true persisted, returning to TITLE");
-                room_goto(room0);
-            } else {
-                obj_game.state = "BATTLE_START";
-                obj_game.wait_timer = 10;
-                room_goto(room0);
-            }
+            obj_game.state = "BATTLE_START";
+            obj_game.wait_timer = 10;
+            room_goto(room0);
             break;
         default:
             show_debug_message("[upgrade] Unknown source '" + _source + "' — bail to rm_run_map");
@@ -578,7 +1288,6 @@ function _count_deck_by_type() {
 // If a future system needs first-of-type removal, re-add or generalize via `_remove_card_at(idx)`.
 
 /// @desc Phase 2c.reward: apply a stage's D55 reward fields to run state.
-/// gold → obj_game.gold += N. items (item_source="starter_pack_peek") → add N × peek_opp_hand.
 /// card (card_algorithm) and upgrade (upgrade_count) are Phase 2c.card / Phase 2d TODO.
 /// Returns true if any reward was applied.
 function _apply_stage_rewards(_stage) {
@@ -590,22 +1299,6 @@ function _apply_stage_rewards(_stage) {
         obj_game.gold += _r.gold;
         show_debug_message("[reward] +" + string(_r.gold) + " gold → " + string(obj_game.gold));
         _applied = true;
-    }
-
-    if (_r.item_count > 0) {
-        if (_r.item_source == "starter_pack_peek") {
-            // Fix (Phase 2c review HIGH-1): use unprefixed item id (canonical in scr_config_items)
-            for (var i = 0; i < _r.item_count; i++) {
-                var _tpl = _get_item_template_by_id("peek_opp_hand");
-                if (!_add_item_to_inventory(_tpl)) {
-                    show_debug_message("[reward] items slot full, skipping item " + string(i));
-                }
-            }
-            show_debug_message("[reward] +" + string(_r.item_count) + " peek items");
-            _applied = true;
-        } else {
-            show_debug_message("[reward] item_source '" + _r.item_source + "' not wired (Phase 2c.card TODO)");
-        }
     }
 
     if (_r.card_count > 0) {
@@ -630,18 +1323,49 @@ function _apply_stage_rewards(_stage) {
 /// @desc Advance from rm_reward. If last battle → RUN_VICTORY in room0; else → next branch in map.
 function _mgr_advance_reward() {
     show_debug_message("[advance_reward] called: current_battle_index=" + string(obj_game.current_battle_index) + " map_position=" + string(obj_game.map_position) + " map.length=" + string(array_length(obj_game.map)));
-    if (obj_game.current_battle_index >= 5) {
+    if (obj_game.current_battle_index >= 3) {
+        _clear_all_card_instances();
+        _clear_all_hand_slots();
+        obj_game.opp_play = noone;
+        obj_game.plr_play = noone;
+        obj_game.player_draw_pile = [];
+        obj_game.player_discard_pile = [];
+        obj_game.opp_draw_pile = [];
+        obj_game.opp_discard_pile = [];
+        obj_game.discard_queue = [];
+        obj_game.deal_queue = [];
+        obj_game.selected_card = noone;
+        obj_game.ui_drag_card = noone;
+        obj_game.ui_drag_drop_target = "";
+        obj_game.ui_active_discard_mode = false;
+        obj_game.ui_overlay_open = OV_NONE;
+        obj_game.state = "RUN_CONTENT_WIP";
+        obj_game.wait_timer = 15;
+        show_debug_message("[advance_reward] stage 4 complete -> RUN_CONTENT_WIP");
+        room_goto(room0);
+        return;
+    }
+    var _next_pos = obj_game.map_position + 1;
+    if (_next_pos >= array_length(obj_game.map)) {
         obj_game.state = "RUN_VICTORY";
         obj_game.wait_timer = 15;
         show_debug_message("[advance_reward] last battle → RUN_VICTORY");
         room_goto(room0);
     } else {
-        obj_game.map_position += 1;
+        obj_game.map_position = _next_pos;
         obj_game.current_branch_line = "";
         obj_game.current_branch_sub_index = 0;
-        obj_game.state = "RUN_MAP_BRANCH";
-        show_debug_message("[advance_reward] → rm_run_map (map_position now " + string(obj_game.map_position) + ")");
-        room_goto(rm_run_map);
+        var _next_node = obj_game.map[obj_game.map_position];
+        if (_next_node.type == "branch_marker") {
+            obj_game.state = "RUN_MAP_BRANCH";
+            room_goto(rm_run_map);
+            return;
+        } else {
+            obj_game.state = "RUN_MAP";
+            obj_game.wait_timer = 0;
+            room_goto(rm_run_map);
+            return;
+        }
     }
 }
 
@@ -657,11 +1381,32 @@ function _mgr_advance_run_map_debug() {
 /// Called from _handle_duel_click (UI click handler) when DUEL button is pressed with a selected card.
 /// Extracted from original PLAYER_WAIT auto-REVEAL body so player can re-select freely before commit.
 function _player_commit_play(_card) {
-    _play_sfx(snd_duel_commit);   // 2026-04-27: distinct DUEL commit sfx
+    _play_battle_sfx("card_commit");
+    if (obj_game.ui_drag_card == _card) {
+        obj_game.ui_drag_card = noone;
+        obj_game.ui_drag_drop_target = "";
+    }
+    _card.is_dragging = false;
+
+    show_debug_message("[qa] player_commit stage=" + obj_game.current_stage_id
+        + " type=" + _int_to_card_type_str(_card.card_type)
+        + " dmg=" + string(_get_card_win_damage(_card)));
+
+    // Active discards resolve before the played card commits.
+    for (var d = 0; d < obj_game.player_hand_limit; d++) {
+        var _dc = obj_game.plr_hand[d];
+        if (_dc != noone && _dc != _card && _dc.marked_for_discard) {
+            _move_card_to_discard_pile(_dc, true);
+        }
+    }
+
+    _relic_on_player_commit_play_pre(_card);
+
     obj_game.plr_play = _card;
+    _card.marked_for_discard = false;
 
     // Remove from plr_hand (exactly one slot matches _card)
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < obj_game.player_hand_limit; i++) {
         if (obj_game.plr_hand[i] == _card) {
             obj_game.plr_hand[i] = noone;
             break;
@@ -669,12 +1414,7 @@ function _player_commit_play(_card) {
     }
 
     // Disable input on remaining hand cards
-    for (var i = 0; i < 3; i++) {
-        if (obj_game.plr_hand[i] != noone) {
-            obj_game.plr_hand[i].hoverable = false;
-            obj_game.plr_hand[i].clickable = false;
-        }
-    }
+    _disable_hand_input("player");
     obj_game.plr_play.hoverable = false;
     obj_game.plr_play.clickable = false;
 
@@ -683,10 +1423,13 @@ function _player_commit_play(_card) {
     obj_game.plr_play.is_moving = true;
     obj_game.plr_play.move_speed = 0.10;
     obj_game.plr_play.depth = -60;
+    _play_battle_sfx("card_land_play");
     // 2026-04-27: snd_card_move removed here — snd_duel_commit at line 657 covers commit moment.
     // Per user "应该是只有commit duel, 没有牌移动或者发牌的音效".
 
+    _apply_card_on_play(obj_game.plr_play, "player", obj_game.opp_play);
     obj_game.selected_card = noone;
+    obj_game.ui_active_discard_mode = false;
     obj_game.state = "REVEAL";
     obj_game.wait_timer = 60;
 }
@@ -725,32 +1468,8 @@ function _enter_current_node() {
     room_goto(_target_room);   // D56: each non-battle node is its own room
 }
 
-/// @desc 2026-04-26: add item to obj_game.items with stacking — same id increments charges
 /// instead of occupying separate slot. Per user "正常逻辑不应该是同类合并 XX 道具 *3,
 /// 用一个变为 *2. 用完就没有了".
-/// @param tpl  ItemStruct template (variable_clone'd if new slot allocated)
-/// @return bool true if added/stacked, false if inventory full
-function _add_item_to_inventory(tpl) {
-    if (is_undefined(tpl)) return false;
-    // Stack into existing slot if same id present
-    for (var _i = 0; _i < array_length(obj_game.items); _i++) {
-        var _existing = obj_game.items[_i];
-        if (_existing.id == tpl.id) {
-            _existing.current_charges += 1;
-            _existing.max_charges += 1;
-            show_debug_message("[items] stacked " + tpl.id + " → " + string(_existing.current_charges) + "/" + string(_existing.max_charges));
-            return true;
-        }
-    }
-    // No matching slot — push if room (4 max)
-    if (array_length(obj_game.items) >= 4) {
-        show_debug_message("[items] inventory full (4 slots), refused " + tpl.id);
-        return false;
-    }
-    array_push(obj_game.items, variable_clone(tpl, 5));
-    show_debug_message("[items] new slot " + tpl.id + " (1/1)");
-    return true;
-}
 
 /// @desc 2026-04-26 option B: select a player hand card → preview at PLR_PLAY position.
 /// Re-clicking another card automatically swaps (old card recomputed by _update_plr_hand_fan
@@ -762,13 +1481,13 @@ function _player_select_card(card_id) {
     if (obj_game.selected_card == card_id) {
         // Click on already-selected card → unselect, fan layout reclaims it next frame.
         obj_game.selected_card = noone;
-        _play_recall_sfx();
+        _play_battle_sfx("card_drop_return");
         show_debug_message("[select] toggled OFF — card returns to fan");
         return;
     }
     // Switching selection: play recall for old, then move/play for new.
     if (obj_game.selected_card != noone) {
-        _play_recall_sfx();
+        _play_battle_sfx("card_drop_return");
     }
     obj_game.selected_card = card_id;
     card_id.target_x = obj_game.PLR_PLAY_X;
@@ -777,8 +1496,24 @@ function _player_select_card(card_id) {
     card_id.is_moving = true;
     card_id.move_speed = 0.18;
     card_id.depth = -60;
-    _play_sfx(snd_card_move);
+    _play_battle_sfx("card_land_play");
     show_debug_message("[select] previewing card at PLR_PLAY position");
+}
+
+function _is_player_hand_card(card_id) {
+    for (var i = 0; i < obj_game.player_hand_limit; i++) {
+        if (obj_game.plr_hand[i] == card_id) return true;
+    }
+    return false;
+}
+
+function _toggle_player_discard_mark(card_id) {
+    if (!_is_player_hand_card(card_id)) return;
+    if (obj_game.selected_card == card_id) {
+        obj_game.selected_card = noone;
+    }
+    card_id.marked_for_discard = !card_id.marked_for_discard;
+    _play_battle_sfx("card_drop_discard");
 }
 
 /// @desc Phase 1 Batch 4 (B3): resolve a card click while ui_select_card_mode is active.
@@ -794,7 +1529,7 @@ function _resolve_select_card_pick(card_id) {
             // Picked card → opp_play (face-up permanently via is_peek_revealed=true).
             // Old opp_play → opp_hand[slot] (state preserved — face-up if peeked, else face-down).
             var _opp_slot = -1;
-            for (var i = 0; i < 3; i++) {
+            for (var i = 0; i < obj_game.opp_hand_limit; i++) {
                 if (obj_game.opp_hand[i] == card_id) { _opp_slot = i; break; }
             }
             if (_opp_slot < 0) {
@@ -822,7 +1557,7 @@ function _resolve_select_card_pick(card_id) {
             // _update_opp_hand_fan) so card immediately animates to hand slot — without this,
             // 1-frame visual stack at OPP_PLAY_X/Y until next _update_opp_hand_fan tick.
             obj_game.opp_hand[_opp_slot] = _old_opp_play;
-            var _angle_rad_old = degtorad((_opp_slot - 1) * obj_game.HAND_FAN_ANGLE_DEG);
+            var _angle_rad_old = degtorad((_opp_slot - (obj_game.opp_hand_limit - 1) / 2) * obj_game.HAND_FAN_ANGLE_DEG);
             var _dx_old = sin(_angle_rad_old) * obj_game.HAND_FAN_RADIUS;
             var _dy_old = cos(_angle_rad_old) * obj_game.HAND_FAN_RADIUS;   // +cos = downward (mirror of plr)
             _old_opp_play.target_x = obj_game.HAND_FAN_PIVOT_X + _dx_old;
@@ -831,7 +1566,7 @@ function _resolve_select_card_pick(card_id) {
             _old_opp_play.move_speed = 0.10;
             _old_opp_play.depth = -50 - _opp_slot;
 
-            _play_sfx(snd_card_move);
+            _play_battle_sfx("card_land_play");
             show_debug_message("[force_opp_replay resolve] swapped opp_hand[" + string(_opp_slot)
                 + "] ↔ opp_play (new opp_play permanently revealed)");
             break;
@@ -839,7 +1574,7 @@ function _resolve_select_card_pick(card_id) {
         case "discard_own_hand":
             // Find which hand slot this card is in
             var _slot = -1;
-            for (var i = 0; i < 3; i++) {
+            for (var i = 0; i < obj_game.player_hand_limit; i++) {
                 if (obj_game.plr_hand[i] == card_id) { _slot = i; break; }
             }
             if (_slot < 0) {
@@ -857,7 +1592,7 @@ function _resolve_select_card_pick(card_id) {
             card_id.target_y = obj_game.PLR_HAND_Y;
             card_id.is_moving = true;
             card_id.move_speed = 0.10;
-            _play_sfx(snd_card_move);
+            _play_battle_sfx("card_drop_discard");
             show_debug_message("[B3 resolve] excluded card from slot " + string(_slot)
                 + " — limbo size " + string(array_length(obj_game.player_excluded_pile)));
             break;
@@ -875,7 +1610,7 @@ function _resolve_select_card_pick(card_id) {
 /// Called from _resolve_select_card_pick (success path) AND _handle_ui_clicks ESC cancel.
 function _exit_select_card_mode() {
     if (obj_game.ui_select_card_callback == "force_opp_replay") {
-        for (var _ii = 0; _ii < 3; _ii++) {
+        for (var _ii = 0; _ii < obj_game.opp_hand_limit; _ii++) {
             var _opc = obj_game.opp_hand[_ii];
             if (_opc != noone) {
                 _opc.hoverable = false;

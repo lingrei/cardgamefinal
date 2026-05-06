@@ -16,12 +16,12 @@ hovered_deck_idx = -1;
 
 // Fan layout for deck display (D63: radius 260, angle ±55°, pivot below screen)
 fan_pivot_x = 640;
-fan_pivot_y = 680;   // pivot slightly below visible area so cards arc gently upward
-fan_radius  = 260;
+fan_pivot_y = 760;   // pivot below screen; keeps target deck away from rule text
+fan_radius  = 280;
 fan_spread_deg = 110;
-fan_card_w = 90;
-fan_card_h = 126;
-fan_hover_pop = 30;
+fan_card_w = 72;
+fan_card_h = 101;
+fan_hover_pop = 22;
 
 fan_positions = _compute_fan_card_positions(
     fan_pivot_x, fan_pivot_y, fan_radius,

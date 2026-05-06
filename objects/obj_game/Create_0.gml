@@ -25,9 +25,13 @@ PLR_DISCARD_Y = 480;
 
 OPP_HAND_Y = 130;     // opp hand horizontal row y (Phase 2b.4 will change to fan center)
 PLR_HAND_Y = 560;     // plr hand center y target — fan layout takes over via _update_plr_hand_fan
+BASE_HAND_LIMIT = 3;
+MAX_HAND_SLOTS = 5;   // Stage mechanics and held_refill_limit_plus_one need temporary headroom.
 HAND_X[0] = 530;      // spread for DEAL temporary positioning before fan
 HAND_X[1] = 640;
 HAND_X[2] = 750;
+HAND_X[3] = 860;
+HAND_X[4] = 970;
 
 // 2026-04-26 layout v3 — even 5-zone vertical (per user "5 个东西始终清晰可见"):
 //   0-30   opp HP / region label
@@ -61,7 +65,7 @@ HAND_FAN_COLLAPSED_SPREAD = 10;      // collapsed stack slight x-offset between 
 
 // Fan state (updated per-frame by _update_plr_hand_fan in _ui_per_frame_update)
 plr_hand_fan_expanded = false;
-plr_hand_hovered_idx = -1;           // 0/1/2 or -1 if none
+plr_hand_hovered_idx = -1;           // hand slot index or -1 if none
 
 // Sprint 3 Phase 2b.4: 敌人手牌镜像扇形 — pivot 在屏幕顶部 y=40, fan 向下开 (与玩家镜像)
 // 敌人扇形始终展开 (玩家不与其交互), 无 hover pop, 卡始终背面朝玩家
@@ -81,7 +85,18 @@ opp_max_hp = 0;
 
 // ===== Round 2: Resources =====
 gold = 0;
-items = [];
+relics = [];
+relic_reward_candidates = [];
+relic_reward_selected = -1;
+shop_relic = undefined;
+relic_player_discarded_this_turn = false;
+relic_first_player_discard_done = false;
+relic_ember_type = "";
+relic_ember_ready = false;
+relic_ballast_card = noone;
+relic_protective_knot_spent = false;
+relic_cold_box_seen = [];
+rule_draw_chain_depth = 0;
 
 // ===== Round 3: UI state =====
 ui_overlay_open = "";          // Use OV_* macros (see scr_ui_helpers)
@@ -92,6 +107,8 @@ ui_player_hp_display = 5;       // lerped HP for animation; init matches player_
 ui_opp_hp_display = 0;
 ui_hp_flash_timer = 0;
 ui_hp_flash_owner = "";
+ui_hp_flash_player_timer = 0;
+ui_hp_flash_opp_timer = 0;
 // Phase 1 Batch 2 (C2/C3): Tier A hit FX + KO ritual state (D27).
 // `ui_last_hit_fast` removed — semantics inverted: KO is now slow-mo (×3) not fast-forward (÷2).
 ui_screen_shake_timer = 0;       // ticks remaining (decays linearly, amp = timer * 0.4)
@@ -100,8 +117,24 @@ ui_hit_flash_color = c_white;     // RPS-typed (rock=#8B0000, scissors=#00FFFF, 
 ui_hit_flash_owner = "";          // "player"/"opp" — which half-screen gets the vignette
 ui_ko_active = false;             // C3: true between JUDGE (HP→0) and BATTLE_END_CHECK
 // Round 4 前瞻 slot（避免 Round 4 回填 struct）
+ui_hit_flash_player_timer = 0;
+ui_hit_flash_opp_timer = 0;
+ui_hit_flash_player_delay = 0;
+ui_hit_flash_opp_delay = 0;
+ui_hit_flash_player_color = c_white;
+ui_hit_flash_opp_color = c_white;
+ui_duel_result_text = "";
+ui_duel_result_timer = 0;
+ui_duel_result_max_timer = 90;
+ui_damage_apply_delay = 62;
+ui_damage_events = [];
+ui_pending_player_hp = player_hp;
+ui_pending_opp_hp = opp_hp;
+ui_pending_player_damage = 0;
+ui_pending_opp_damage = 0;
+ui_pending_player_hit_color = c_white;
+ui_pending_opp_hit_color = c_white;
 ui_reward_candidates = [];
-ui_shop_items = [];
 ui_event_data = undefined;
 
 // Backlog cleanup: overlay back-stack — when nested overlay opens (e.g. pause → settings),
@@ -116,7 +149,6 @@ prev_overlay = "";
 if (!variable_global_exists("current_bgm")) global.current_bgm = "";
 if (!variable_global_exists("current_bgm_inst")) global.current_bgm_inst = noone;
 
-// Phase 1 Batch 4 (B3/B4/B5): item-driven card-select / overlay state.
 // `ui_select_card_mode` enables hand-click-resolves-to-callback flow (B3 discard_own_hand).
 // `ui_scry_cards` snapshots top 3 of player_draw_pile for scry overlay (B4).
 // `ui_pile_picker_target` tells pile picker overlay which discard to show (B5 steal/recover).
@@ -127,27 +159,27 @@ ui_select_card_callback = "";
 ui_scry_cards = [];
 ui_pile_picker_target = "";
 player_excluded_pile = [];
+ui_active_discard_mode = false;
+ui_drag_card = noone;
+ui_drag_drop_target = "";
 
 // ===== Round 2: Run map state =====
 map = [];
 map_position = 0;
 current_battle_index = 0;
 current_stage_id = "";         // D55: current stage (used for rule_pool / reward lookup)
+current_enemy_id = "";
 current_branch_line = "";      // "A" | "B" | ""
-current_branch_sub_index = 0;  // 0 or 1 (within a branch line)
+current_branch_sub_index = 0;  // 0..2 (within a branch line)
 
 // ===== Round 4 Sprint 2: AI rule F memory (D48/D58) + H1 hidden draw flag (D59) =====
 last_player_play_type = "";        // "rock" | "scissors" | "paper" | "" (first turn / no data)
 last_player_won_last_turn = false; // true if player beat enemy last round → F rule triggers
 current_stage_has_h1 = false;      // mirror of stage.has_h1 for current battle
-player_immune_this_round = false;  // D48: set by item_immune_this_round, cleared after DISCARD
+opp_play_was_seen_before_reveal = false;
 
 // Sprint 3 Phase 2d: upgrade context — set by source rooms (rest/shop/event_d/starter), cleared after finalize
 upgrade_context = undefined;
-
-// Sprint 3 Phase 3.tutorial (D28): flag set by RUN_START if tutorial_done=false (first play).
-// _upgrade_finalize source="starter" checks this to decide: tutorial complete → TITLE; regular → BATTLE_START.
-is_tutorial_run = false;
 
 // ===== Round 2: Player deck (config layer, persists across battles) =====
 player_deck = [];              // Array<CardStruct>
@@ -156,12 +188,13 @@ player_deck = [];              // Array<CardStruct>
 state = "TITLE";
 wait_timer = 0;
 deal_step = 0;
+deal_queue = [];
 discard_step = 0;
 selected_card = noone;
+turn_start_prepared = false;
 
-// ===== PEEK state (Sprint 2 / D42+D43): held item peek now in PLAYER_WAIT, not phase =====
-// peeked_card / peek_used fields removed — peek is now item-driven (item_use spawns
-// reveal immediately), and dedupe is tracked via obj_card.is_peek_revealed (D60).
+// ===== PEEK state =====
+// Peeks come from traits and relics; dedupe is tracked via obj_card.is_peek_revealed.
 
 // ===== Independent decks (Round 2; replaces midterm draw_pile/discard_pile) =====
 player_draw_pile = [];
@@ -173,8 +206,12 @@ opp_discard_pile = [];
 shuffling_owner = "";  // "player" | "opp" | ""
 
 // ===== Hand / play slots (Midterm retained) =====
-opp_hand[0] = noone; opp_hand[1] = noone; opp_hand[2] = noone;
-plr_hand[0] = noone; plr_hand[1] = noone; plr_hand[2] = noone;
+player_hand_limit = BASE_HAND_LIMIT;
+opp_hand_limit = BASE_HAND_LIMIT;
+for (var _hand_init_i = 0; _hand_init_i < MAX_HAND_SLOTS; _hand_init_i++) {
+    opp_hand[_hand_init_i] = noone;
+    plr_hand[_hand_init_i] = noone;
+}
 opp_play = noone;
 plr_play = noone;
 discard_queue = [];

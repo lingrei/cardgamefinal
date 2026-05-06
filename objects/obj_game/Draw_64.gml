@@ -9,24 +9,24 @@ var _win_w = display_get_gui_width();
 var _win_h = display_get_gui_height();
 var _cx = _win_w / 2;
 
-var _is_full_overlay = (state == "TITLE" || state == "RUN_VICTORY" || state == "RUN_DEFEAT");
+var _is_full_overlay = (state == "TITLE" || state == "RUN_VICTORY" || state == "RUN_DEFEAT" || state == "RUN_CONTENT_WIP");
 
 draw_set_font(fnt_score);
 
 // ===== In-game HUD (hidden on TITLE / RUN_END full overlays) =====
-// 2026-04-26 strip: removed [⚙] placeholder, midline divider, gold text, "no items" placeholder,
+// 2026-04-26 strip: removed placeholder chrome and obsolete HUD text.
 // "Battle X/6" counter, 4 deck-query buttons. Pure-meta info (gold, item slots) kept for now in
 // item bar only; G shown on map/shop/etc rooms instead. Player HP + Opp HP + DUEL kept.
 if (!_is_full_overlay) {
     // Opp HP (top-left) + Plr HP (bottom-left). Pass real HP int for text accuracy (lerp display
     // for bar fill animation, real value for "X/Y" text).
     _draw_hp_bar(20, 20, 240, 24, ui_opp_hp_display, opp_max_hp, UI_COLOR_OPP,
-        (ui_hp_flash_timer > 0 && ui_hp_flash_owner == "opp"), opp_hp);
+        (ui_hp_flash_opp_timer > 0 || (ui_hp_flash_timer > 0 && ui_hp_flash_owner == "opp")), opp_hp);
     _draw_hp_bar(20, _win_h - 40, 240, 24, ui_player_hp_display, player_max_hp, UI_COLOR_PLAYER,
-        (ui_hp_flash_timer > 0 && ui_hp_flash_owner == "player"), player_hp);
+        (ui_hp_flash_player_timer > 0 || (ui_hp_flash_timer > 0 && ui_hp_flash_owner == "player")), player_hp);
 
     // ===== DUEL button — round icon, right side (v3.3 — hover/disabled/enabled 3 states) =====
-    if (!ui_select_card_mode) {
+    if (false && !ui_select_card_mode) {
         var _duel_enabled = (selected_card != noone);
         var _dr = _duel_btn_rect();
         var _ccx = _dr.x + _dr.w / 2;
@@ -62,8 +62,14 @@ if (!_is_full_overlay) {
         draw_text_transformed(_ccx, _ccy, "DUEL", _txt_scale, _txt_scale, 0);
     }
 
-    // Items bar (4 fixed slots, only visible if items exist — empty slots draw nothing).
-    _draw_item_bar(400, _win_h - 55);
+    if (false && state == "PLAYER_WAIT" && !ui_select_card_mode) {
+        var _discard_r = _discard_btn_rect();
+        var _discard_label = ui_active_discard_mode ? "MARK" : "DISCARD";
+        _draw_button(_discard_r.x, _discard_r.y, _discard_r.w, _discard_r.h, _discard_label, 0.26);
+    }
+
+    // Relic shelf: run-level anchors replace the old consumable item bar.
+    _draw_relic_shelf(_win_w - 270, _win_h - 48);
 
     // ===== 2026-04-26: 4 pile-region borders + always-visible label with count =====
     // Label format: "OPP DECK [12]". Hover highlights border + label brighter.
@@ -94,6 +100,33 @@ if (!_is_full_overlay) {
         draw_set_alpha(1);
     }
 
+    _draw_enemy_battle_strip();
+
+    if (state == "PLAYER_WAIT" && ui_drag_card != noone && instance_exists(ui_drag_card) && !ui_select_card_mode) {
+        var _play_r = _player_play_drop_rect();
+        var _discard_drop_r = _player_discard_drop_rect();
+        var _pulse_alpha = 0.35 + 0.18 * sin(current_time / 110);
+
+        var _play_hot = (ui_drag_drop_target == "play");
+        draw_set_alpha(_play_hot ? 0.72 : _pulse_alpha);
+        draw_set_colour(_play_hot ? UI_COLOR_HIGHLIGHT : UI_COLOR_PLAYER);
+        draw_rectangle(_play_r.x, _play_r.y, _play_r.x + _play_r.w, _play_r.y + _play_r.h, true);
+        draw_rectangle(_play_r.x + 2, _play_r.y + 2, _play_r.x + _play_r.w - 2, _play_r.y + _play_r.h - 2, true);
+        draw_set_halign(fa_center);
+        draw_set_valign(fa_middle);
+        draw_text_transformed(_play_r.x + _play_r.w / 2, _play_r.y + _play_r.h / 2, "PLAY", 0.35, 0.35, 0);
+
+        var _discard_hot = (ui_drag_drop_target == "discard" || ui_drag_drop_target == "discard_blocked");
+        draw_set_alpha(_discard_hot ? 0.72 : _pulse_alpha);
+        draw_set_colour((ui_drag_drop_target == "discard_blocked") ? UI_COLOR_WARNING : UI_COLOR_SUCCESS);
+        draw_rectangle(_discard_drop_r.x, _discard_drop_r.y, _discard_drop_r.x + _discard_drop_r.w, _discard_drop_r.y + _discard_drop_r.h, true);
+        draw_rectangle(_discard_drop_r.x + 2, _discard_drop_r.y + 2, _discard_drop_r.x + _discard_drop_r.w - 2, _discard_drop_r.y + _discard_drop_r.h - 2, true);
+        draw_set_halign(fa_center);
+        draw_set_valign(fa_middle);
+        draw_text_transformed(_discard_drop_r.x + _discard_drop_r.w / 2, _discard_drop_r.y + _discard_drop_r.h / 2, "DISCARD", 0.26, 0.26, 0);
+        draw_set_alpha(1);
+    }
+
     // ===== Phase 1 Batch 2 (C2): Tier A hit flash vignette on loser side =====
     // Half-screen alpha rect, RPS-typed color (rock 暗红 / scissors 青 / paper 白),
     // alpha decays from 0.5 → 0 over 25 ticks. Loser side: opp = top half, player = bottom.
@@ -112,6 +145,21 @@ if (!_is_full_overlay) {
     // ===== Phase 1 Batch 2 (C3): KO ritual — desaturate vignette + "K.O." pulsing text =====
     // Active during JUDGE_ANIMATE → JUDGE_WAIT → DISCARD → BATTLE_END_CHECK (until reset).
     // Slow-mo is handled via wait_timer ×3 in Step_0; visuals here add the ceremony layer.
+    if (ui_hit_flash_opp_timer > 0) {
+        draw_set_alpha((ui_hit_flash_opp_timer / 25) * 0.46);
+        draw_set_colour(ui_hit_flash_opp_color);
+        draw_rectangle(0, 0, _win_w, _win_h / 2, false);
+        draw_set_alpha(1);
+    }
+    if (ui_hit_flash_player_timer > 0) {
+        draw_set_alpha((ui_hit_flash_player_timer / 25) * 0.46);
+        draw_set_colour(ui_hit_flash_player_color);
+        draw_rectangle(0, _win_h / 2, _win_w, _win_h, false);
+        draw_set_alpha(1);
+    }
+
+    _draw_duel_feedback();
+
     if (ui_ko_active) {
         // Dark overlay for desaturate feel
         draw_set_alpha(0.35);
@@ -146,7 +194,7 @@ if (state == "TITLE") {
     draw_set_colour(UI_COLOR_PLAYER);
     draw_text_transformed(_cx, _win_h / 2 - 10, "- ROGUELIKE -", 0.5, 0.5, 0);
 
-    if (ui_overlay_open != OV_SETTINGS && ui_overlay_open != OV_PAUSE && ui_overlay_open != OV_NEW_GAME_CONFIRM) {
+    if (ui_overlay_open != OV_SETTINGS && ui_overlay_open != OV_PAUSE) {
         var _btn_w = 220, _btn_h = 50, _btn_gap = 16;
         var _btn_y0 = _win_h / 2 + 60;
         _draw_button(_cx - _btn_w / 2, _btn_y0,                              _btn_w, _btn_h, "NEW GAME", 0.45);
@@ -156,7 +204,7 @@ if (state == "TITLE") {
 }
 
 // ===== Run end overlays (room0-only; other end states handled in their rooms) =====
-if (state == "RUN_VICTORY" || state == "RUN_DEFEAT") _draw_run_end_overlay();
+if (state == "RUN_VICTORY" || state == "RUN_DEFEAT" || state == "RUN_CONTENT_WIP") _draw_run_end_overlay();
 
 // ===== Deck query overlays (can open on top of battle) =====
 if (ui_overlay_open == OV_DECK_PD
@@ -173,7 +221,6 @@ if (ui_overlay_open == OV_PILE_PICKER) _draw_pile_picker_overlay();
 // ===== Phase 1 Batch 5 (D1/D3): system overlays =====
 if (ui_overlay_open == OV_SETTINGS) _draw_settings_overlay();
 if (ui_overlay_open == OV_PAUSE) _draw_pause_overlay();
-if (ui_overlay_open == OV_NEW_GAME_CONFIRM) _draw_new_game_confirm_overlay();
 
 // ===== Card-select mode hint banner (B3 + 2026-04-26 force_opp_replay) =====
 if (ui_select_card_mode) {

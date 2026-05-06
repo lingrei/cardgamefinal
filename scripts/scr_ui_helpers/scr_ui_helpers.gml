@@ -7,15 +7,11 @@
 #macro OV_DECK_PDC       "deck_pdc"
 #macro OV_DECK_OD        "deck_od"
 #macro OV_DECK_ODC       "deck_odc"
-// Phase 1 Batch 4 (B4/B5): item-driven overlays.
 #macro OV_SCRY_TOP_3     "scry_top_3"
 #macro OV_PILE_PICKER    "pile_picker"
 // Phase 1 Batch 5 (D1/D3): system overlays.
 #macro OV_SETTINGS       "settings"
 #macro OV_PAUSE          "pause"
-// 2026-04-26: NEW GAME tutorial-skip confirm.
-#macro OV_NEW_GAME_CONFIRM "new_game_confirm"
-
 // Phase 1 Batch 6 (F5): magic-number constants extracted from inline use sites.
 // Card sprite half-dimensions for hand-fan hit-test (sprite is 90×126 logical).
 #macro HAND_CARD_HALF_W  45
@@ -27,16 +23,23 @@
 // states replaced by independent rooms (D56 architecture).
 
 // ===== Geometry / color constants (Sprint 3 expanded palette) =====
-#macro UI_COLOR_BG          make_colour_rgb(13, 2, 33)       // BG_DARK — scene base
-#macro UI_COLOR_BG_MID      make_colour_rgb(26, 26, 46)      // panel / card bg
-#macro UI_COLOR_PLAYER      make_colour_rgb(0, 229, 255)     // player / peek tag
-#macro UI_COLOR_OPP         make_colour_rgb(255, 64, 129)    // enemy / hp_mod tag
-#macro UI_COLOR_HIGHLIGHT   make_colour_rgb(255, 235, 59)    // selected / gold / matchup tag / CTA
+#macro UI_COLOR_BG          make_colour_rgb(18, 13, 18)      // walnut table base
+#macro UI_COLOR_BG_MID      make_colour_rgb(42, 32, 34)      // leather / dark panel
+#macro UI_COLOR_PLAYER      make_colour_rgb(72, 201, 214)    // cyan court light
+#macro UI_COLOR_OPP         make_colour_rgb(184, 48, 72)     // wax / threat accent
+#macro UI_COLOR_HIGHLIGHT   make_colour_rgb(226, 182, 88)    // brass / selected / CTA
 #macro UI_COLOR_DIM         make_colour_rgb(90, 90, 90)      // disabled
 #macro UI_COLOR_NEUTRAL     make_colour_rgb(200, 200, 200)   // standard text
 #macro UI_COLOR_SUCCESS     make_colour_rgb(0, 230, 118)     // heal / buff / victory / draw tag
 #macro UI_COLOR_WARNING     make_colour_rgb(255, 152, 0)     // low HP / risk
 #macro UI_COLOR_RULE_DECK   make_colour_rgb(156, 39, 176)    // deck-manipulating rules tag
+#macro UI_COLOR_PARCHMENT   make_colour_rgb(218, 199, 154)
+#macro UI_COLOR_PARCHMENT_D make_colour_rgb(145, 105, 68)
+#macro UI_COLOR_INK         make_colour_rgb(38, 29, 33)
+#macro UI_COLOR_ROCK_ACCENT     make_colour_rgb(176, 73, 61)
+#macro UI_COLOR_SCISSORS_ACCENT make_colour_rgb(70, 150, 190)
+#macro UI_COLOR_PAPER_ACCENT    make_colour_rgb(207, 170, 71)
+#macro UI_COLOR_TABLE_LINE  make_colour_rgb(92, 67, 58)
 
 // ===== Anchor-based layout helper (Sprint 3) =====
 // Returns { x, y } given an anchor name + pixel offset. Decouples layout from
@@ -76,6 +79,26 @@ function _play_sfx(_snd) {
 }
 
 /// @desc 2026-04-26: card recall sfx — uses snd_card_move per user "card_recall 用移动的音效更和谐".
+function _play_battle_sfx(_cue) {
+    show_debug_message("[sfx] battle cue=" + string(_cue));
+    switch (_cue) {
+        case "card_drag_start":    return _play_sfx(snd_card_move);
+        case "card_drop_return":   return _play_sfx(snd_card_move);
+        case "card_drop_discard":  return _play_sfx(snd_card_move);
+        case "card_commit":        return _play_sfx(snd_duel_commit);
+        case "card_land_play":     return _play_sfx(snd_card_move);
+        case "card_deal":          return _play_sfx(snd_card_deal);
+        case "card_flip":          return _play_sfx(snd_card_flip);
+        case "match_win":          return _play_sfx(snd_win);
+        case "match_lose":         return _play_sfx(snd_lose);
+        case "match_tie":          return _play_sfx(snd_tie);
+        case "damage_hit":         return _play_sfx(snd_screen_shake);
+        case "ko":                 return _play_sfx(snd_ko_kill);
+        case "shuffle":            return _play_sfx(snd_card_move);
+    }
+    return _play_sfx(snd_card_move);
+}
+
 function _play_recall_sfx() {
     var _inst = audio_play_sound(snd_card_move, 1, false);
     audio_sound_gain(_inst, global.sfx_volume, 0);
@@ -129,11 +152,115 @@ function _btn_click(_x, _y, _w, _h) {
 /// 0=rock 暗红 (#8B0000 钝器感) / 1=scissors 青 (#00FFFF 锐利刺击) / 2=paper 白 (#FFFFFF 扩散冲击).
 function _get_rps_color(_card_type) {
     switch (_card_type) {
-        case 0: return make_colour_rgb(0x8B, 0x00, 0x00);   // rock — dark red impact
-        case 1: return make_colour_rgb(0x00, 0xFF, 0xFF);   // scissors — cyan slash
-        case 2: return make_colour_rgb(0xFF, 0xFF, 0xFF);   // paper — white burst
+        case 0: return UI_COLOR_ROCK_ACCENT;
+        case 1: return UI_COLOR_SCISSORS_ACCENT;
+        case 2: return UI_COLOR_PAPER_ACCENT;
     }
     return c_white;
+}
+
+function _card_type_accent(_card_type) {
+    if (is_string(_card_type)) _card_type = _str_to_card_type_int(_card_type);
+    switch (_card_type) {
+        case 0: return UI_COLOR_ROCK_ACCENT;
+        case 1: return UI_COLOR_SCISSORS_ACCENT;
+        case 2: return UI_COLOR_PAPER_ACCENT;
+    }
+    return UI_COLOR_NEUTRAL;
+}
+
+function _card_type_display_label(_card_type) {
+    if (is_string(_card_type)) _card_type = _str_to_card_type_int(_card_type);
+    switch (_card_type) {
+        case 0: return "ROCK";
+        case 1: return "SCISSORS";
+        case 2: return "PAPER";
+    }
+    return "UNKNOWN";
+}
+
+function _card_type_sprite(_card_type, _face_up) {
+    if (!_face_up) return spr_card_back;
+    if (is_string(_card_type)) _card_type = _str_to_card_type_int(_card_type);
+    switch (_card_type) {
+        case 0: return spr_card_rock;
+        case 1: return spr_card_scissors;
+        case 2: return spr_card_paper;
+    }
+    return spr_card_back;
+}
+
+function _draw_case_file_lines(_x, _y, _w, _h, _alpha) {
+    draw_set_alpha(_alpha);
+    draw_set_colour(UI_COLOR_TABLE_LINE);
+    for (var _i = 0; _i < 5; _i++) {
+        var _yy = _y + (_i + 1) * _h / 6;
+        draw_line_width(_x + 18, _yy, _x + _w - 18, _yy + 2 * sin(_i), 1);
+    }
+    draw_set_alpha(1);
+}
+
+function _draw_rps_type_icon(_card_type, _cx, _cy, _size, _alpha) {
+    if (is_string(_card_type)) _card_type = _str_to_card_type_int(_card_type);
+    var _s = _size;
+    var _col = _card_type_accent(_card_type);
+    draw_set_alpha(_alpha);
+
+    switch (_card_type) {
+        case 0:
+            // Rock: sealed stone.
+            draw_set_colour(make_colour_rgb(68, 57, 54));
+            draw_circle(_cx, _cy + _s * 0.04, _s * 0.30, false);
+            draw_circle(_cx - _s * 0.11, _cy - _s * 0.05, _s * 0.20, false);
+            draw_circle(_cx + _s * 0.13, _cy - _s * 0.02, _s * 0.22, false);
+            draw_set_colour(_col);
+            draw_circle(_cx + _s * 0.02, _cy + _s * 0.05, _s * 0.17, false);
+            draw_set_colour(UI_COLOR_PARCHMENT);
+            draw_line_width(_cx - _s * 0.08, _cy + _s * 0.05, _cx + _s * 0.10, _cy + _s * 0.05, max(1, _s * 0.035));
+            draw_line_width(_cx + _s * 0.01, _cy - _s * 0.04, _cx + _s * 0.01, _cy + _s * 0.14, max(1, _s * 0.035));
+            break;
+
+        case 1:
+            // Scissors: two-finger pointer.
+            draw_set_colour(make_colour_rgb(214, 184, 148));
+            draw_line_width(_cx - _s * 0.20, _cy + _s * 0.18, _cx + _s * 0.17, _cy - _s * 0.22, max(3, _s * 0.09));
+            draw_line_width(_cx - _s * 0.08, _cy + _s * 0.23, _cx + _s * 0.28, _cy - _s * 0.06, max(3, _s * 0.08));
+            draw_circle(_cx - _s * 0.18, _cy + _s * 0.20, _s * 0.16, false);
+            draw_set_colour(_col);
+            draw_rectangle(_cx - _s * 0.39, _cy + _s * 0.22, _cx - _s * 0.04, _cy + _s * 0.38, false);
+            draw_set_colour(UI_COLOR_INK);
+            draw_line_width(_cx + _s * 0.12, _cy - _s * 0.25, _cx + _s * 0.22, _cy - _s * 0.10, max(1, _s * 0.025));
+            break;
+
+        case 2:
+            // Paper: parchment sheet.
+            draw_set_colour(UI_COLOR_PARCHMENT);
+            draw_rectangle(_cx - _s * 0.31, _cy - _s * 0.36, _cx + _s * 0.31, _cy + _s * 0.36, false);
+            draw_set_colour(UI_COLOR_PARCHMENT_D);
+            draw_rectangle(_cx - _s * 0.31, _cy - _s * 0.36, _cx + _s * 0.31, _cy + _s * 0.36, true);
+            draw_set_colour(_col);
+            draw_line_width(_cx - _s * 0.20, _cy + _s * 0.18, _cx - _s * 0.06, _cy - _s * 0.07, max(1, _s * 0.035));
+            draw_line_width(_cx - _s * 0.06, _cy - _s * 0.07, _cx + _s * 0.18, _cy - _s * 0.20, max(1, _s * 0.035));
+            draw_circle(_cx - _s * 0.20, _cy + _s * 0.18, max(2, _s * 0.045), false);
+            draw_circle(_cx - _s * 0.06, _cy - _s * 0.07, max(2, _s * 0.045), false);
+            draw_circle(_cx + _s * 0.18, _cy - _s * 0.20, max(2, _s * 0.045), false);
+            break;
+
+        default:
+            draw_set_colour(UI_COLOR_DIM);
+            draw_circle(_cx, _cy, _s * 0.25, true);
+            break;
+    }
+    draw_set_alpha(1);
+}
+
+function _draw_card_face(_card_type, _x, _y, _w, _h, _rotation, _alpha, _face_up) {
+    var _spr = _card_type_sprite(_card_type, _face_up);
+    var _sx = _w / max(1, sprite_get_width(_spr));
+    var _sy = _h / max(1, sprite_get_height(_spr));
+    draw_set_alpha(1);
+    draw_sprite_ext(_spr, 0, _x, _y, _sx, _sy, _rotation, c_white, _alpha);
+    draw_set_alpha(1);
 }
 
 function _draw_button(_x, _y, _w, _h, _text, _scale) {
@@ -149,6 +276,11 @@ function _draw_button(_x, _y, _w, _h, _text, _scale) {
     draw_set_valign(fa_middle);
     draw_set_font(fnt_score);
     draw_text_transformed(_x + _w/2, _y + _h/2, _text, _scale, _scale, 0);
+}
+
+function _draw_text_ext_scaled(_x, _y, _text, _line_px, _width_px, _scale) {
+    var _s = max(0.01, _scale);
+    draw_text_ext_transformed(_x, _y, _text, _line_px / _s, _width_px / _s, _s, _s, 0);
 }
 
 function _draw_hp_bar(_x, _y, _w, _h, _hp_display, _max_hp, _color_fill, _flash_on, _hp_real) {
@@ -185,86 +317,542 @@ function _draw_deck_buttons(_x, _y) {
     }
 }
 
-function _get_item_color(_effect_type) {
-    switch (_effect_type) {
-        case "peek":          return make_colour_rgb(0, 229, 255);
-        case "draw_extra":    return make_colour_rgb(100, 255, 100);
-        case "force_replay":  return make_colour_rgb(255, 200, 100);
-        default:              return make_colour_rgb(200, 200, 200);
+function _effect_color_by_tag(_tag) {
+    switch (_tag) {
+        case "damage":      return UI_COLOR_OPP;
+        case "peek":        return UI_COLOR_RULE_DECK;
+        case "matchup":     return UI_COLOR_HIGHLIGHT;
+        case "draw":        return UI_COLOR_SUCCESS;
+        case "held":        return UI_COLOR_HIGHLIGHT;
+        case "same":        return UI_COLOR_HIGHLIGHT;
+        case "route":       return UI_COLOR_RULE_DECK;
+        case "rps_discard": return UI_COLOR_WARNING;
+        default:            return UI_COLOR_NEUTRAL;
     }
 }
 
-function _draw_item_bar(_x, _y) {
+function _draw_effect_icon(_icon_id, _x, _y, _size, _color) {
     draw_set_alpha(1);
+    draw_set_colour(_color);
+    draw_circle(_x + _size / 2, _y + _size / 2, _size / 2, false);
+    draw_set_colour(UI_COLOR_BG);
+    draw_circle(_x + _size / 2, _y + _size / 2, _size / 2 - 2, true);
+    draw_set_halign(fa_center);
+    draw_set_valign(fa_middle);
     draw_set_font(fnt_score);
-    var _items = obj_game.items;
-    var _slot_count = 4;
-    var _hovered_idx = -1;   // 2026-04-26: track hover for tooltip below
-    for (var i = 0; i < _slot_count; i++) {
-        var _ix = _x + i * 45;
-        if (i < array_length(_items)) {
-            var _item = _items[i];
-            var _alpha = (_item.current_charges > 0) ? 1.0 : 0.3;
-            draw_set_alpha(_alpha);
-            draw_set_colour(_get_item_color(_item.effect_type));
-            draw_rectangle(_ix, _y, _ix + 40, _y + 50, false);
-            draw_set_colour(c_white);
-            draw_set_halign(fa_center);
-            draw_set_valign(fa_top);
-            draw_text_transformed(_ix + 20, _y + 10, string_upper(string_char_at(_item.id, 1)), 0.5, 0.5, 0);
-            draw_text_transformed(_ix + 20, _y + 38, string(_item.current_charges) + "/" + string(_item.max_charges), 0.2, 0.2, 0);
-            draw_set_alpha(1);
-            if (_is_mouse_in_rect(_ix, _y, 40, 50)) _hovered_idx = i;
-        } else {
-            draw_set_alpha(0.4);
-            draw_set_colour(UI_COLOR_DIM);
-            draw_rectangle(_ix, _y, _ix + 40, _y + 50, true);
-            draw_set_alpha(1);
-        }
+    var _label = "?";
+    switch (_icon_id) {
+        case "target_rock":     _label = "R"; break;
+        case "target_paper":    _label = "P"; break;
+        case "target_scissors": _label = "S"; break;
+        case "impact_plus":     _label = "+"; break;
+        case "tie_hit":         _label = "="; break;
+        case "double_card":     _label = "2"; break;
+        case "return_deck":
+        case "return_top":
+        case "topdeck":         _label = "^"; break;
+        case "eye":
+        case "eye_card":
+        case "eye_hour":
+        case "eye_discard":
+        case "observation_mirror":
+        case "hand_mirror":     _label = "O"; break;
+        case "draw_card":
+        case "draw_chain":
+        case "hand_plus":
+        case "funnel_card":     _label = ">"; break;
+        case "hour_plus":       _label = "H"; break;
+        case "discard_plus":    _label = "D"; break;
+        case "random_stamp":    _label = "*"; break;
+        case "prey":
+        case "tooth_totem":     _label = "V"; break;
+        case "shed":            _label = "/"; break;
+        case "same_fuel":       _label = "~"; break;
+        case "ember_bowl":      _label = "E"; break;
+        case "anchor_stone":    _label = "A"; break;
+        case "stamp_press":     _label = "C"; break;
+        case "ice_box":         _label = "I"; break;
+        case "equal_ring":      _label = "="; break;
+        case "tri_compass":     _label = "3"; break;
+        case "single_blade":    _label = "1"; break;
+        case "half_mask":       _label = "M"; break;
+        case "balance_scales":  _label = "B"; break;
+        case "backlight_lamp":  _label = "L"; break;
+        case "blind_die":       _label = "?"; break;
+        case "slow_clock":      _label = "T"; break;
+        case "card_spark":      _label = "*"; break;
+        case "knot_charm":      _label = "K"; break;
+        case "gold_cache":      _label = "G"; break;
+        case "random_card":     _label = "C"; break;
+        case "choose_upgrade":  _label = "+"; break;
+        case "auto_upgrade":    _label = "++"; break;
+    }
+    _draw_inner_effect_symbol(_icon_id, _x + _size / 2, _y + _size / 2, _size * 0.72, _color);
+}
+
+function _draw_inner_effect_symbol(_icon_id, _cx, _cy, _size, _color) {
+    var _s = _size;
+    draw_set_colour(_color);
+    switch (_icon_id) {
+        case "target_rock":
+            _draw_rps_type_icon(0, _cx, _cy, _s * 0.95, 1);
+            break;
+        case "target_scissors":
+            _draw_rps_type_icon(1, _cx, _cy, _s * 0.95, 1);
+            break;
+        case "target_paper":
+            _draw_rps_type_icon(2, _cx, _cy, _s * 0.95, 1);
+            break;
+
+        case "impact_plus":
+        case "card_spark":
+            draw_line_width(_cx - _s * 0.24, _cy, _cx + _s * 0.24, _cy, max(1, _s * 0.08));
+            draw_line_width(_cx, _cy - _s * 0.24, _cx, _cy + _s * 0.24, max(1, _s * 0.08));
+            draw_line_width(_cx - _s * 0.17, _cy - _s * 0.17, _cx + _s * 0.17, _cy + _s * 0.17, max(1, _s * 0.035));
+            break;
+
+        case "tie_hit":
+        case "equal_ring":
+        case "balance_scales":
+            draw_line_width(_cx - _s * 0.30, _cy - _s * 0.04, _cx + _s * 0.30, _cy - _s * 0.04, max(1, _s * 0.04));
+            draw_line_width(_cx, _cy - _s * 0.26, _cx, _cy + _s * 0.26, max(1, _s * 0.04));
+            draw_circle(_cx - _s * 0.20, _cy + _s * 0.14, max(2, _s * 0.11), true);
+            draw_circle(_cx + _s * 0.20, _cy + _s * 0.14, max(2, _s * 0.11), true);
+            break;
+
+        case "double_card":
+        case "same_fuel":
+            draw_rectangle(_cx - _s * 0.28, _cy - _s * 0.18, _cx + _s * 0.08, _cy + _s * 0.22, true);
+            draw_rectangle(_cx - _s * 0.08, _cy - _s * 0.28, _cx + _s * 0.28, _cy + _s * 0.12, true);
+            break;
+
+        case "return_deck":
+        case "return_top":
+        case "topdeck":
+            draw_rectangle(_cx - _s * 0.25, _cy + _s * 0.05, _cx + _s * 0.25, _cy + _s * 0.28, true);
+            draw_line_width(_cx, _cy + _s * 0.22, _cx, _cy - _s * 0.24, max(1, _s * 0.06));
+            draw_line_width(_cx, _cy - _s * 0.24, _cx - _s * 0.15, _cy - _s * 0.08, max(1, _s * 0.06));
+            draw_line_width(_cx, _cy - _s * 0.24, _cx + _s * 0.15, _cy - _s * 0.08, max(1, _s * 0.06));
+            break;
+
+        case "eye":
+        case "eye_card":
+        case "eye_hour":
+        case "eye_discard":
+        case "observation_mirror":
+        case "hand_mirror":
+        case "backlight_lamp":
+            draw_line_width(_cx - _s * 0.32, _cy, _cx - _s * 0.12, _cy - _s * 0.14, max(1, _s * 0.04));
+            draw_line_width(_cx - _s * 0.12, _cy - _s * 0.14, _cx + _s * 0.12, _cy - _s * 0.14, max(1, _s * 0.04));
+            draw_line_width(_cx + _s * 0.12, _cy - _s * 0.14, _cx + _s * 0.32, _cy, max(1, _s * 0.04));
+            draw_line_width(_cx - _s * 0.32, _cy, _cx - _s * 0.12, _cy + _s * 0.14, max(1, _s * 0.04));
+            draw_line_width(_cx - _s * 0.12, _cy + _s * 0.14, _cx + _s * 0.12, _cy + _s * 0.14, max(1, _s * 0.04));
+            draw_line_width(_cx + _s * 0.12, _cy + _s * 0.14, _cx + _s * 0.32, _cy, max(1, _s * 0.04));
+            draw_circle(_cx, _cy, max(2, _s * 0.09), false);
+            break;
+
+        case "draw_card":
+        case "draw_chain":
+        case "hand_plus":
+        case "funnel_card":
+            draw_rectangle(_cx - _s * 0.27, _cy - _s * 0.23, _cx + _s * 0.08, _cy + _s * 0.25, true);
+            draw_line_width(_cx + _s * 0.02, _cy, _cx + _s * 0.30, _cy, max(1, _s * 0.06));
+            draw_line_width(_cx + _s * 0.30, _cy, _cx + _s * 0.18, _cy - _s * 0.11, max(1, _s * 0.06));
+            draw_line_width(_cx + _s * 0.30, _cy, _cx + _s * 0.18, _cy + _s * 0.11, max(1, _s * 0.06));
+            break;
+
+        case "hour_plus":
+        case "slow_clock":
+            draw_circle(_cx, _cy, _s * 0.28, true);
+            draw_line_width(_cx, _cy, _cx, _cy - _s * 0.18, max(1, _s * 0.04));
+            draw_line_width(_cx, _cy, _cx + _s * 0.13, _cy + _s * 0.07, max(1, _s * 0.04));
+            break;
+
+        case "discard_plus":
+        case "shed":
+            draw_line_width(_cx - _s * 0.24, _cy + _s * 0.24, _cx + _s * 0.24, _cy - _s * 0.24, max(1, _s * 0.07));
+            draw_line_width(_cx + _s * 0.02, _cy + _s * 0.18, _cx + _s * 0.24, _cy + _s * 0.18, max(1, _s * 0.045));
+            draw_line_width(_cx + _s * 0.13, _cy + _s * 0.07, _cx + _s * 0.13, _cy + _s * 0.29, max(1, _s * 0.045));
+            break;
+
+        case "random_stamp":
+            for (var _i = 0; _i < 6; _i++) {
+                var _a = _i * 60;
+                draw_line_width(_cx, _cy, _cx + lengthdir_x(_s * 0.30, _a), _cy + lengthdir_y(_s * 0.30, _a), max(1, _s * 0.035));
+            }
+            break;
+
+        case "prey":
+        case "tooth_totem":
+            draw_triangle(_cx, _cy - _s * 0.30, _cx - _s * 0.20, _cy + _s * 0.25, _cx + _s * 0.20, _cy + _s * 0.25, false);
+            break;
+
+        case "ember_bowl":
+            draw_line_width(_cx - _s * 0.25, _cy + _s * 0.14, _cx + _s * 0.25, _cy + _s * 0.14, max(1, _s * 0.07));
+            draw_line_width(_cx - _s * 0.17, _cy + _s * 0.14, _cx, _cy + _s * 0.28, max(1, _s * 0.04));
+            draw_line_width(_cx + _s * 0.17, _cy + _s * 0.14, _cx, _cy + _s * 0.28, max(1, _s * 0.04));
+            draw_line_width(_cx, _cy - _s * 0.27, _cx - _s * 0.08, _cy + _s * 0.06, max(1, _s * 0.08));
+            draw_line_width(_cx, _cy - _s * 0.27, _cx + _s * 0.10, _cy + _s * 0.06, max(1, _s * 0.05));
+            break;
+
+        case "anchor_stone":
+        case "ice_box":
+            draw_rectangle(_cx - _s * 0.25, _cy - _s * 0.18, _cx + _s * 0.25, _cy + _s * 0.20, true);
+            draw_line_width(_cx - _s * 0.14, _cy - _s * 0.02, _cx + _s * 0.14, _cy - _s * 0.02, max(1, _s * 0.04));
+            break;
+
+        case "stamp_press":
+            draw_rectangle(_cx - _s * 0.18, _cy - _s * 0.28, _cx + _s * 0.18, _cy + _s * 0.10, true);
+            draw_line_width(_cx - _s * 0.30, _cy + _s * 0.18, _cx + _s * 0.30, _cy + _s * 0.18, max(1, _s * 0.07));
+            break;
+
+        case "tri_compass":
+            draw_circle(_cx, _cy, _s * 0.31, true);
+            draw_line_width(_cx, _cy - _s * 0.25, _cx - _s * 0.22, _cy + _s * 0.17, max(1, _s * 0.035));
+            draw_line_width(_cx - _s * 0.22, _cy + _s * 0.17, _cx + _s * 0.22, _cy + _s * 0.17, max(1, _s * 0.035));
+            draw_line_width(_cx + _s * 0.22, _cy + _s * 0.17, _cx, _cy - _s * 0.25, max(1, _s * 0.035));
+            break;
+
+        case "single_blade":
+            draw_line_width(_cx - _s * 0.20, _cy + _s * 0.25, _cx + _s * 0.24, _cy - _s * 0.25, max(2, _s * 0.08));
+            draw_line_width(_cx - _s * 0.24, _cy + _s * 0.20, _cx - _s * 0.04, _cy + _s * 0.36, max(1, _s * 0.05));
+            break;
+
+        case "half_mask":
+            draw_circle(_cx - _s * 0.07, _cy, _s * 0.26, true);
+            draw_line_width(_cx, _cy - _s * 0.25, _cx, _cy + _s * 0.25, max(1, _s * 0.04));
+            draw_circle(_cx - _s * 0.14, _cy - _s * 0.04, max(1, _s * 0.04), false);
+            break;
+
+        case "blind_die":
+            draw_rectangle(_cx - _s * 0.24, _cy - _s * 0.24, _cx + _s * 0.24, _cy + _s * 0.24, true);
+            draw_circle(_cx, _cy, max(2, _s * 0.055), false);
+            draw_circle(_cx - _s * 0.13, _cy - _s * 0.13, max(2, _s * 0.045), false);
+            draw_circle(_cx + _s * 0.13, _cy + _s * 0.13, max(2, _s * 0.045), false);
+            break;
+
+        case "knot_charm":
+            draw_circle(_cx - _s * 0.11, _cy, _s * 0.15, true);
+            draw_circle(_cx + _s * 0.11, _cy, _s * 0.15, true);
+            draw_line_width(_cx - _s * 0.25, _cy + _s * 0.22, _cx + _s * 0.25, _cy - _s * 0.22, max(1, _s * 0.04));
+            break;
+
+        case "gold_cache":
+            draw_circle(_cx - _s * 0.10, _cy + _s * 0.08, _s * 0.16, true);
+            draw_circle(_cx + _s * 0.08, _cy - _s * 0.04, _s * 0.16, true);
+            draw_line_width(_cx - _s * 0.18, _cy + _s * 0.25, _cx + _s * 0.24, _cy + _s * 0.25, max(1, _s * 0.05));
+            break;
+        case "random_card":
+            draw_rectangle(_cx - _s * 0.21, _cy - _s * 0.28, _cx + _s * 0.21, _cy + _s * 0.28, true);
+            draw_line_width(_cx - _s * 0.12, _cy, _cx + _s * 0.12, _cy, max(1, _s * 0.05));
+            break;
+        case "choose_upgrade":
+        case "auto_upgrade":
+            draw_line_width(_cx - _s * 0.26, _cy, _cx + _s * 0.26, _cy, max(1, _s * 0.07));
+            draw_line_width(_cx, _cy - _s * 0.26, _cx, _cy + _s * 0.26, max(1, _s * 0.07));
+            draw_circle(_cx, _cy, _s * 0.31, true);
+            break;
+
+        default:
+            draw_circle(_cx, _cy, _s * 0.22, true);
+            draw_line_width(_cx - _s * 0.18, _cy, _cx + _s * 0.18, _cy, max(1, _s * 0.04));
+            break;
+    }
+}
+
+function _draw_trait_mark(_rule, _x, _y, _size) {
+    var _rule_obj = is_string(_rule) ? _get_rule_template_by_id(_rule) : _rule;
+    var _meta = _rule_ui_meta(_rule);
+    var _col = _effect_color_by_tag(_meta.tag);
+    var _cx = _x + _size / 2;
+    var _cy = _y + _size / 2;
+    var _trigger = is_undefined(_rule_obj) ? "" : (_rule_obj[$ "trigger"] ?? "");
+
+    draw_set_alpha(1);
+    switch (_trigger) {
+        case "on_play":
+            draw_set_colour(_col);
+            draw_circle(_cx, _cy, _size * 0.48, false);
+            draw_set_colour(UI_COLOR_INK);
+            draw_circle(_cx, _cy, _size * 0.31, true);
+            break;
+        case "on_active_discard":
+        case "held_on_owner_active_discard":
+        case "on_any_active_discard":
+            draw_set_colour(_col);
+            draw_rectangle(_x, _y + _size * 0.12, _x + _size, _y + _size * 0.88, false);
+            draw_set_colour(UI_COLOR_BG);
+            draw_triangle(_x + _size * 0.72, _y + _size * 0.12, _x + _size, _y + _size * 0.12, _x + _size, _y + _size * 0.42, false);
+            draw_set_colour(UI_COLOR_INK);
+            draw_rectangle(_x + 2, _y + _size * 0.16, _x + _size - 2, _y + _size * 0.84, true);
+            break;
+        case "on_draw":
+            draw_set_colour(_col);
+            draw_rectangle(_x + _size * 0.10, _y + _size * 0.22, _x + _size * 0.90, _y + _size * 0.86, false);
+            draw_rectangle(_x + _size * 0.52, _y + _size * 0.08, _x + _size * 0.88, _y + _size * 0.28, false);
+            draw_set_colour(UI_COLOR_INK);
+            draw_rectangle(_x + _size * 0.13, _y + _size * 0.25, _x + _size * 0.87, _y + _size * 0.83, true);
+            break;
+        case "while_held_turn_start":
+        case "held_passive":
+            draw_set_colour(_col);
+            draw_circle(_cx, _cy, _size * 0.44, true);
+            draw_circle(_cx, _cy, _size * 0.28, true);
+            draw_line_width(_cx + _size * 0.18, _cy - _size * 0.34, _cx + _size * 0.18, _cy + _size * 0.32, max(1, _size * 0.08));
+            break;
+        case "on_win":
+            draw_set_colour(_col);
+            draw_circle(_cx, _cy, _size * 0.45, false);
+            draw_set_colour(UI_COLOR_BG);
+            draw_line_width(_cx - _size * 0.18, _cy - _size * 0.18, _cx + _size * 0.18, _cy + _size * 0.18, max(1, _size * 0.05));
+            break;
+        case "on_tie":
+        case "judge":
+            draw_set_colour(_col);
+            draw_rectangle(_x + _size * 0.08, _y + _size * 0.12, _x + _size * 0.92, _y + _size * 0.88, false);
+            draw_set_colour(UI_COLOR_INK);
+            draw_rectangle(_x + _size * 0.13, _y + _size * 0.17, _x + _size * 0.87, _y + _size * 0.83, true);
+            break;
+        case "on_played":
+            draw_set_colour(_col);
+            draw_rectangle(_x + _size * 0.08, _y + _size * 0.20, _x + _size * 0.92, _y + _size * 0.84, false);
+            draw_set_colour(UI_COLOR_INK);
+            draw_rectangle(_x + _size * 0.12, _y + _size * 0.24, _x + _size * 0.88, _y + _size * 0.80, true);
+            break;
+        default:
+            draw_set_colour(_col);
+            draw_circle(_cx, _cy, _size * 0.46, false);
+            draw_set_colour(UI_COLOR_INK);
+            draw_circle(_cx, _cy, _size * 0.32, true);
+            break;
     }
 
-    // 2026-04-26: hover tooltip showing item description (per user "现在的道具看不到任何效果").
-    // Force EN i18n — fnt_score sprite font doesn't support 中文 (Phase 4 audio batch will add TTF).
-    if (_hovered_idx >= 0) {
-        var _it = _items[_hovered_idx];
-        var _desc = "[" + _it.id + "]";
-        if (variable_struct_exists(global.i18n_dict, "en")) {
-            var _en_dict = global.i18n_dict.en;
-            if (variable_struct_exists(_en_dict, _it.description_text)) {
-                _desc = _en_dict[$ _it.description_text];
-            }
-        }
-        var _name = string_upper(_it.id);
-        var _tt_w = 320;
-        var _tt_h = 56;
-        var _tt_x = _x + _hovered_idx * 45 + 20 - _tt_w / 2;
-        // Position tooltip above the slot
-        var _tt_y = _y - _tt_h - 8;
-        if (_tt_x < 8) _tt_x = 8;
-        if (_tt_x + _tt_w > display_get_gui_width() - 8) _tt_x = display_get_gui_width() - 8 - _tt_w;
-        draw_set_alpha(0.95);
-        draw_set_colour(UI_COLOR_BG_MID);
-        draw_rectangle(_tt_x, _tt_y, _tt_x + _tt_w, _tt_y + _tt_h, false);
+    _draw_inner_effect_symbol(_meta.icon_id, _cx, _cy, _size * 0.62, UI_COLOR_PARCHMENT);
+    draw_set_alpha(1);
+}
+
+function _draw_relic_object_token(_icon_id, _x, _y, _size, _pulse) {
+    var _cx = _x + _size / 2;
+    var _cy = _y + _size / 2;
+    var _col = _pulse ? UI_COLOR_HIGHLIGHT : UI_COLOR_PARCHMENT_D;
+    draw_set_alpha(1);
+    draw_set_colour(make_colour_rgb(31, 23, 25));
+    draw_circle(_cx, _cy, _size * 0.50, false);
+    draw_set_colour(_pulse ? UI_COLOR_HIGHLIGHT : UI_COLOR_TABLE_LINE);
+    draw_circle(_cx, _cy, _size * 0.48, true);
+    draw_circle(_cx, _cy, _size * 0.42, true);
+    _draw_inner_effect_symbol(_icon_id, _cx, _cy, _size * 0.86, _col);
+}
+
+function _draw_rule_chip(_rule, _x, _y, _size) {
+    _draw_trait_mark(_rule, _x, _y, _size);
+}
+
+function _rule_tag_label(_tag) {
+    switch (_tag) {
+        case "damage":      return "DAMAGE";
+        case "peek":        return "INFO";
+        case "matchup":     return "MATCHUP";
+        case "draw":        return "DRAW";
+        case "held":        return "HELD";
+        case "same":        return "SAME";
+        case "route":       return "ROUTE";
+        case "rps_discard": return "DISCARD";
+    }
+    return "TRAIT";
+}
+
+function _draw_rule_info_card(_rule, _x, _y, _w, _h, _selected) {
+    var _meta = _rule_ui_meta(_rule);
+    var _col = _effect_color_by_tag(_meta.tag);
+    var _hover = point_in_rectangle(mouse_x, mouse_y, _x, _y, _x + _w, _y + _h);
+
+    draw_set_alpha(1);
+    draw_set_colour(UI_COLOR_BG_MID);
+    draw_rectangle(_x, _y, _x + _w, _y + _h, false);
+    draw_set_colour(_selected ? UI_COLOR_HIGHLIGHT : (_hover ? UI_COLOR_PLAYER : UI_COLOR_NEUTRAL));
+    draw_rectangle(_x, _y, _x + _w, _y + _h, true);
+    if (_selected || _hover) {
+        draw_rectangle(_x + 1, _y + 1, _x + _w - 1, _y + _h - 1, true);
+    }
+
+    _draw_rule_chip(_rule, _x + 16, _y + 16, 34);
+
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
+    draw_set_font(fnt_score);
+    draw_set_colour(_col);
+    draw_text_transformed(_x + 60, _y + 14, _rule_tag_label(_meta.tag), 0.16, 0.16, 0);
+
+    draw_set_colour(c_white);
+    draw_text_transformed(_x + 60, _y + 35, _t(_meta.display_text), 0.22, 0.22, 0);
+
+    draw_set_colour(UI_COLOR_NEUTRAL);
+    _draw_text_ext_scaled(_x + 16, _y + 72, _t(_meta.description_text), 17, _w - 32, 0.18);
+
+    if (variable_struct_exists(_rule, "cost") && _rule.cost > 0) {
+        draw_set_halign(fa_right);
         draw_set_colour(UI_COLOR_HIGHLIGHT);
-        draw_rectangle(_tt_x, _tt_y, _tt_x + _tt_w, _tt_y + _tt_h, true);
-        draw_set_alpha(1);
+        draw_text_transformed(_x + _w - 14, _y + 14, string(_rule.cost) + "G", 0.28, 0.28, 0);
+    }
+}
+
+function _draw_rule_hover_tooltip(_rule, _x, _y) {
+    var _meta = _rule_ui_meta(_rule);
+    var _w = 360;
+    var _h = 112;
+    if (_x + _w > display_get_gui_width()) _x = display_get_gui_width() - _w - 8;
+    if (_y + _h > display_get_gui_height()) _y = display_get_gui_height() - _h - 8;
+    if (_x < 8) _x = 8;
+    if (_y < 8) _y = 8;
+
+    draw_set_alpha(1);
+    draw_set_colour(UI_COLOR_BG_MID);
+    draw_rectangle(_x, _y, _x + _w, _y + _h, false);
+    draw_set_alpha(1);
+    draw_set_colour(_effect_color_by_tag(_meta.tag));
+    draw_rectangle(_x, _y, _x + _w, _y + _h, true);
+
+    _draw_rule_chip(_rule, _x + 10, _y + 12, 30);
+
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
+    draw_set_font(fnt_score);
+    draw_set_colour(UI_COLOR_HIGHLIGHT);
+    draw_text_transformed(_x + 50, _y + 10, _t(_meta.display_text), 0.26, 0.26, 0);
+    draw_set_colour(UI_COLOR_NEUTRAL);
+    draw_text_transformed(_x + 50, _y + 36, _rule_tag_label(_meta.tag), 0.16, 0.16, 0);
+    draw_set_colour(c_white);
+    _draw_text_ext_scaled(_x + 12, _y + 62, _t(_meta.description_text), 19, _w - 24, 0.20);
+}
+
+function _draw_card_struct_tooltip(_card, _x, _y) {
+    var _rules = _card.rules;
+    if (!is_array(_rules)) _rules = [];
+    var _w = 330;
+    var _h = 74 + array_length(_rules) * 30;
+    if (_x + _w > display_get_gui_width()) _x = display_get_gui_width() - _w - 8;
+    if (_y + _h > display_get_gui_height()) _y = display_get_gui_height() - _h - 8;
+    if (_x < 8) _x = 8;
+    if (_y < 8) _y = 8;
+
+    draw_set_alpha(1);
+    draw_set_colour(UI_COLOR_BG_MID);
+    draw_rectangle(_x, _y, _x + _w, _y + _h, false);
+    draw_set_alpha(1);
+    draw_set_colour(UI_COLOR_PLAYER);
+    draw_rectangle(_x, _y, _x + _w, _y + _h, true);
+
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
+    draw_set_font(fnt_score);
+    draw_set_colour(c_white);
+    draw_text_transformed(_x + 12, _y + 10, _card_type_display_label(_card.type_name), 0.28, 0.28, 0);
+
+    if (array_length(_rules) == 0) {
+        draw_set_colour(UI_COLOR_DIM);
+        draw_text_transformed(_x + 12, _y + 42, "No added traits", 0.20, 0.20, 0);
+        return;
+    }
+
+    var _yy = _y + 42;
+    for (var i = 0; i < array_length(_rules); i++) {
+        var _r = _rules[i];
+        _draw_rule_chip(_r, _x + 12, _yy, 22);
         draw_set_halign(fa_left);
         draw_set_valign(fa_top);
         draw_set_colour(UI_COLOR_HIGHLIGHT);
-        draw_text_transformed(_tt_x + 8, _tt_y + 6, _name + "  (" + string(_it.current_charges) + "/" + string(_it.max_charges) + ")", 0.28, 0.28, 0);
-        draw_set_colour(c_white);
-        draw_text_transformed(_tt_x + 8, _tt_y + 26, _desc, 0.22, 0.22, 0);
+        draw_text_transformed(_x + 42, _yy - 2, _t(_rule_display_key(_r.id)), 0.20, 0.20, 0);
+        draw_set_colour(UI_COLOR_NEUTRAL);
+        _draw_text_ext_scaled(_x + 42, _yy + 14, _t(_r.description_text), 16, _w - 54, 0.16);
+        _yy += 30;
     }
+}
+
+function _draw_relic_token(_relic, _x, _y, _size) {
+    var _pulse = (_relic[$ "pulse_timer"] ?? 0) > 0;
+    var _s = _pulse ? (_size + 4 + 2 * sin(current_time / 80)) : _size;
+    var _meta = _relic_ui_meta(_relic);
+    _draw_relic_object_token(_meta.icon_id, _x - (_s - _size) / 2, _y - (_s - _size) / 2, _s, _pulse);
+}
+
+function _draw_relic_card(_relic, _x, _y, _w, _h, _selected) {
+    var _hover = point_in_rectangle(mouse_x, mouse_y, _x, _y, _x + _w, _y + _h);
+    draw_set_colour(UI_COLOR_BG_MID);
+    draw_rectangle(_x, _y, _x + _w, _y + _h, false);
+    draw_set_colour(_selected ? UI_COLOR_HIGHLIGHT : (_hover ? UI_COLOR_PLAYER : UI_COLOR_NEUTRAL));
+    draw_rectangle(_x, _y, _x + _w, _y + _h, true);
+    _draw_relic_token(_relic, _x + 16, _y + 18, 44);
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
+    draw_set_font(fnt_score);
+    draw_set_colour(c_white);
+    draw_text_transformed(_x + 72, _y + 16, _t(_relic.display_text), 0.3, 0.3, 0);
+    draw_set_colour(UI_COLOR_NEUTRAL);
+    _draw_text_ext_scaled(_x + 72, _y + 48, _t(_relic.description_text), 19, _w - 88, 0.22);
+}
+
+function _draw_relic_shelf(_x, _y) {
+    var _relics = obj_game.relics;
+    var _max_show = min(5, array_length(_relics));
+    var _hovered = -1;
+    draw_set_alpha(0.85);
+    draw_set_colour(UI_COLOR_BG_MID);
+    draw_rectangle(_x - 8, _y - 18, _x + 228, _y + 40, false);
+    draw_set_alpha(1);
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_middle);
+    draw_set_font(fnt_score);
+    draw_set_colour(array_length(_relics) > 0 ? UI_COLOR_HIGHLIGHT : UI_COLOR_DIM);
+    draw_text_transformed(_x - 4, _y - 8, "RELICS", 0.16, 0.16, 0);
+
+    if (array_length(_relics) == 0) {
+        draw_set_colour(UI_COLOR_DIM);
+        draw_rectangle(_x, _y + 6, _x + 32, _y + 38, true);
+        draw_text_transformed(_x + 42, _y + 22, "none", 0.18, 0.18, 0);
+        return;
+    }
+
+    for (var i = 0; i < _max_show; i++) {
+        var _tx = _x + i * 42;
+        _draw_relic_token(_relics[i], _tx, _y + 6, 32);
+        if (point_in_rectangle(mouse_x, mouse_y, _tx, _y + 6, _tx + 32, _y + 38)) _hovered = i;
+    }
+    if (array_length(_relics) > 5) {
+        draw_set_halign(fa_left);
+        draw_set_valign(fa_middle);
+        draw_set_colour(UI_COLOR_HIGHLIGHT);
+        draw_text_transformed(_x + 5 * 42, _y + 22, "+" + string(array_length(_relics) - 5), 0.28, 0.28, 0);
+    }
+    if (_hovered >= 0) {
+        _draw_relic_hover_tooltip(_relics[_hovered], mouse_x + 16, mouse_y + 16);
+    }
+}
+
+function _draw_relic_hover_tooltip(_relic, _x, _y) {
+    var _w = 330;
+    var _h = 86;
+    if (_x + _w > display_get_gui_width()) _x = display_get_gui_width() - _w - 8;
+    if (_y + _h > display_get_gui_height()) _y = display_get_gui_height() - _h - 8;
+    draw_set_alpha(1);
+    draw_set_colour(UI_COLOR_BG_MID);
+    draw_rectangle(_x, _y, _x + _w, _y + _h, false);
+    draw_set_colour(UI_COLOR_HIGHLIGHT);
+    draw_rectangle(_x, _y, _x + _w, _y + _h, true);
+    draw_set_alpha(1);
+    _draw_relic_token(_relic, _x + 8, _y + 10, 32);
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
+    draw_set_font(fnt_score);
+    draw_set_colour(UI_COLOR_HIGHLIGHT);
+    draw_text_transformed(_x + 50, _y + 8, _t(_relic.display_text), 0.28, 0.28, 0);
+    draw_set_colour(c_white);
+    _draw_text_ext_scaled(_x + 50, _y + 34, _t(_relic.description_text), 19, _w - 60, 0.22);
 }
 
 function _get_rule_color(_rule) {
     var _tag = _rule[$ "tag"] ?? "";
-    switch (_tag) {
-        case "hp_mod":    return UI_COLOR_OPP;
-        case "peek":      return UI_COLOR_PLAYER;
-        case "matchup":   return UI_COLOR_HIGHLIGHT;
-        default:          return c_white;
-    }
+    return _effect_color_by_tag(_tag);
 }
 
 // Returns enemy struct for "current or next" battle (for ENEMY DECK overlay).
@@ -285,6 +873,208 @@ function _get_next_or_current_enemy() {
     }
     var _fallback = _get_stage_by_id("stage_1");
     return _get_enemy_template_by_id(_pick_enemy_from_stage(_fallback));
+}
+
+function _get_next_or_current_stage() {
+    var _map = obj_game.map;
+    var _start = obj_game.map_position;
+    for (var i = _start; i < array_length(_map); i++) {
+        if (_map[i].type == "battle") {
+            var _stage_id = _map[i].payload[$ "stage_id"] ?? "stage_1";
+            return _get_stage_by_id(_stage_id);
+        }
+    }
+    return _get_stage_by_id("stage_1");
+}
+
+function _enemy_ai_summary(_enemy) {
+    if (is_undefined(_enemy)) return "Unknown AI.";
+    var _ai = _enemy.ai_params[$ "type"] ?? "";
+    switch (_ai) {
+        case "stage1_f": return "Learns your last winning type.";
+        case "stage3_rock": return "Prefers Rock when available.";
+        case "stage4_paper_hoarder": return "Keeps Paper, discards non-Paper.";
+        case "fixed_first": return "Plays the first available card.";
+    }
+    return "Deterministic enemy plan.";
+}
+
+function _stage_mechanic_summary(_stage) {
+    if (is_undefined(_stage)) return "";
+    var _parts = [];
+    if (variable_struct_exists(_stage, "mechanics")) {
+        var _m = _stage.mechanics;
+        if (variable_struct_exists(_m, "hand_limit_delta_both") && _m.hand_limit_delta_both != 0) {
+            array_push(_parts, "Both hands " + ((_m.hand_limit_delta_both > 0) ? "+" : "") + string(_m.hand_limit_delta_both));
+        }
+    }
+    if (array_length(_parts) == 0) return "";
+    var _out = _parts[0];
+    for (var i = 1; i < array_length(_parts); i++) _out += " / " + _parts[i];
+    return _out;
+}
+
+function _enemy_deck_line(_enemy, _type_name) {
+    var _comp = _enemy.deck_composition;
+    var _count = _comp[$ _type_name] ?? 0;
+    var _label = string_upper(string_copy(_type_name, 1, 1)) + " x" + string(_count);
+    var _rules = _enemy_rules_for_type(_enemy, _type_name);
+    if (array_length(_rules) == 0) return _label + ": no traits";
+
+    var _names = "";
+    for (var i = 0; i < array_length(_rules); i++) {
+        if (i > 0) _names += ", ";
+        _names += _t(_rule_display_key(_rules[i].id));
+    }
+    return _label + ": " + _names;
+}
+
+function _draw_enemy_briefing_panel(_x, _y, _w, _h, _stage, _enemy) {
+    if (is_undefined(_stage) || is_undefined(_enemy)) return;
+
+    var _mechanic = _stage_mechanic_summary(_stage);
+
+    draw_set_alpha(0.96);
+    draw_set_colour(UI_COLOR_PARCHMENT);
+    draw_rectangle(_x, _y, _x + _w, _y + _h, false);
+    draw_set_alpha(1);
+    draw_set_colour(UI_COLOR_PARCHMENT_D);
+    draw_rectangle(_x, _y, _x + _w, _y + _h, true);
+
+    draw_set_font(fnt_score);
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
+    draw_set_colour(UI_COLOR_INK);
+    draw_text_transformed(_x + 24, _y + 20, "Battle", 0.48, 0.48, 0);
+    draw_set_colour(UI_COLOR_OPP);
+    draw_text_transformed(_x + 24, _y + 70, "Enemy HP " + string(_enemy.max_hp), 0.30, 0.30, 0);
+
+    var _line_y = _y + 112;
+    if (_mechanic != "") {
+        draw_set_colour(UI_COLOR_PLAYER);
+        draw_text_transformed(_x + 24, _line_y, "Mechanic", 0.26, 0.26, 0);
+        draw_set_colour(UI_COLOR_INK);
+        _draw_text_ext_scaled(_x + 24, _line_y + 30, _mechanic, 18, _w - 48, 0.23);
+        _line_y += 78;
+    }
+
+    draw_set_colour(UI_COLOR_PLAYER);
+    draw_text_transformed(_x + 24, _line_y, "Deck", 0.28, 0.28, 0);
+    draw_set_colour(UI_COLOR_INK);
+    _draw_text_ext_scaled(_x + 24, _line_y + 34, _enemy_deck_line(_enemy, "rock"), 18, _w - 48, 0.22);
+    _draw_text_ext_scaled(_x + 24, _line_y + 72, _enemy_deck_line(_enemy, "scissors"), 18, _w - 48, 0.22);
+    _draw_text_ext_scaled(_x + 24, _line_y + 110, _enemy_deck_line(_enemy, "paper"), 18, _w - 48, 0.22);
+}
+
+function _draw_enemy_battle_strip() {
+    if (obj_game.current_enemy_id == "") return;
+    var _stage = _get_stage_by_id(obj_game.current_stage_id);
+    if (is_undefined(_stage)) return;
+
+    var _mechanic = _stage_mechanic_summary(_stage);
+    if (_mechanic == "") return;
+
+    var _x = 294;
+    var _y = 18;
+    var _w = 360;
+    var _h = 30;
+    draw_set_alpha(0.82);
+    draw_set_colour(UI_COLOR_BG_MID);
+    draw_rectangle(_x, _y, _x + _w, _y + _h, false);
+    draw_set_alpha(1);
+    draw_set_colour(UI_COLOR_NEUTRAL);
+    draw_rectangle(_x, _y, _x + _w, _y + _h, true);
+    draw_set_halign(fa_left);
+    draw_set_valign(fa_top);
+    draw_set_font(fnt_score);
+    draw_set_colour(UI_COLOR_NEUTRAL);
+    draw_text_transformed(_x + 10, _y + 7, "Mechanic", 0.18, 0.18, 0);
+    draw_set_colour(c_white);
+    draw_text_transformed(_x + 96, _y + 7, _mechanic, 0.18, 0.18, 0);
+    draw_set_alpha(1);
+}
+
+function _ui_set_duel_result(_text) {
+    obj_game.ui_duel_result_text = _text;
+    obj_game.ui_duel_result_timer = obj_game.ui_duel_result_max_timer;
+}
+
+function _ui_add_damage_feedback(_owner, _amount, _delay) {
+    if (_amount <= 0) return;
+    if (is_undefined(_delay)) _delay = 0;
+    array_push(obj_game.ui_damage_events, {
+        owner: _owner,
+        amount: _amount,
+        delay: max(0, _delay),
+        timer: 44,
+        max_timer: 44
+    });
+}
+
+function _queue_side_hit_feedback(_owner, _color, _delay) {
+    if (is_undefined(_delay)) _delay = 0;
+    if (_owner == "opp") {
+        obj_game.ui_hit_flash_opp_color = _color;
+        obj_game.ui_hit_flash_opp_delay = max(0, _delay);
+        if (_delay <= 0) {
+            obj_game.ui_hit_flash_opp_timer = 25;
+            obj_game.ui_screen_shake_timer = max(obj_game.ui_screen_shake_timer, 20);
+        }
+    } else if (_owner == "player") {
+        obj_game.ui_hit_flash_player_color = _color;
+        obj_game.ui_hit_flash_player_delay = max(0, _delay);
+        if (_delay <= 0) {
+            obj_game.ui_hit_flash_player_timer = 25;
+            obj_game.ui_screen_shake_timer = max(obj_game.ui_screen_shake_timer, 20);
+        }
+    }
+}
+
+function _draw_duel_feedback() {
+    var _w = display_get_gui_width();
+    var _h = display_get_gui_height();
+    var _cx = _w / 2;
+
+    if (obj_game.ui_duel_result_timer > 0 && obj_game.ui_duel_result_text != "") {
+        var _life = obj_game.ui_duel_result_timer / max(1, obj_game.ui_duel_result_max_timer);
+        var _alpha = (_life > 0.34) ? 1 : clamp(_life / 0.34, 0, 1);
+        var _scale = 1.20 + (1 - _life) * 0.12;
+        var _col = UI_COLOR_NEUTRAL;
+        if (obj_game.ui_duel_result_text == "WIN") _col = UI_COLOR_SUCCESS;
+        else if (obj_game.ui_duel_result_text == "LOSE") _col = UI_COLOR_OPP;
+
+        draw_set_alpha(_alpha);
+        draw_set_halign(fa_center);
+        draw_set_valign(fa_middle);
+        draw_set_font(fnt_score);
+        draw_set_colour(UI_COLOR_BG);
+        draw_text_transformed(_cx + 4, _h * 0.47 + 4, obj_game.ui_duel_result_text, _scale, _scale, 0);
+        draw_set_colour(_col);
+        draw_text_transformed(_cx, _h * 0.47, obj_game.ui_duel_result_text, _scale, _scale, 0);
+        draw_set_alpha(1);
+    }
+
+    for (var i = 0; i < array_length(obj_game.ui_damage_events); i++) {
+        var _ev = obj_game.ui_damage_events[i];
+        if (_ev.delay > 0) continue;
+        var _t = _ev.timer / max(1, _ev.max_timer);
+        var _progress = 1 - _t;
+        var _target_y = (_ev.owner == "opp") ? _h * 0.30 : _h * 0.68;
+        var _start_offset = (_ev.owner == "opp") ? -46 : 46;
+        var _y = _target_y + _start_offset * _t;
+        var _scale_d = 0.82 + 0.22 * sin(_progress * 3.14159);
+        var _text = "-" + string(_ev.amount);
+
+        draw_set_halign(fa_center);
+        draw_set_valign(fa_middle);
+        draw_set_font(fnt_score);
+        draw_set_alpha(clamp(0.42 + _t * 0.75, 0, 1));
+        draw_set_colour(UI_COLOR_BG);
+        draw_text_transformed(_cx + 3, _y + 3, _text, _scale_d, _scale_d, 0);
+        draw_set_colour(make_colour_rgb(255, 70, 110));
+        draw_text_transformed(_cx, _y, _text, _scale_d, _scale_d, 0);
+    }
+    draw_set_alpha(1);
 }
 
 // ===== Click handlers dispatched from _handle_ui_clicks =====
@@ -326,7 +1116,6 @@ function _handle_deck_buttons() {
 function _btn_h_or(_h) { return _h; }
 
 function _handle_overlay_interaction() {
-    // Phase 1 Batch 4 (B4/B5) + Batch 5 (D1/D3): item-driven + system overlays have own click handlers.
     // Route them BEFORE the deck-overlay close-button logic (which would steal control button click).
     if (obj_game.ui_overlay_open == OV_SCRY_TOP_3) {
         _handle_scry_click();
@@ -342,10 +1131,6 @@ function _handle_overlay_interaction() {
     }
     if (obj_game.ui_overlay_open == OV_PAUSE) {
         _handle_pause_click();
-        return;
-    }
-    if (obj_game.ui_overlay_open == OV_NEW_GAME_CONFIRM) {
-        _handle_new_game_confirm_click();
         return;
     }
     // Close button — rect matches _draw_deck_overlay: (_win_w-140, _win_h-70, 120, 40)
@@ -377,37 +1162,11 @@ function _handle_run_end_click() {
         game_restart();
     }
     var _cx = display_get_gui_width()/2;
-    if (_btn_click(_cx - 100, 600, 200, 50)) {
+    var _cy = display_get_gui_height()/2;
+    var _btn_w = (obj_game.state == "RUN_CONTENT_WIP") ? 240 : 200;
+    var _btn_y = (obj_game.state == "RUN_CONTENT_WIP") ? (_cy + 96) : (_cy + 80);
+    if (_btn_click(_cx - _btn_w / 2, _btn_y, _btn_w, 50)) {
         game_restart();
-    }
-}
-
-function _handle_item_bar_click() {
-    var _items = obj_game.items;
-    if (array_length(_items) == 0) return;
-    // Sprint 3 Phase 2b.1: item bar moved to bottom HUD (x=400, y=_win_h-55)
-    // to match Draw_64's new layout. Must stay in sync with _draw_item_bar call site.
-    var _x = 400;
-    var _y = display_get_gui_height() - 55;
-    for (var i = 0; i < array_length(_items); i++) {
-        var _ix = _x + i * 45;
-        if (_click_in_rect(_ix, _y, 40, 50)) {
-            var _item = _items[i];
-            if (_item.current_charges > 0) {
-                if (item_use(_item.id)) {
-                    _item.current_charges -= 1;
-                    show_debug_message("[items] used " + _item.id + ", charges now " + string(_item.current_charges) + "/" + string(_item.max_charges));
-                    // 2026-04-26: when charges hit 0, remove slot (per user "用完就没有了, 槽位变空").
-                    if (_item.current_charges <= 0) {
-                        array_delete(obj_game.items, i, 1);
-                        show_debug_message("[items] removed empty slot " + _item.id);
-                    }
-                } else {
-                    show_debug_message("[items] item_use refused for " + _item.id + " (no charges deducted)");
-                }
-            }
-            return;
-        }
     }
 }
 
@@ -442,15 +1201,16 @@ function _handle_ui_clicks() {
         return;
     }
     // Phase 1 Batch 5 (D3): ESC opens pause overlay during in-battle states.
-    // Excluded: TITLE / RUN_VICTORY / RUN_DEFEAT (already menu-state, no pause needed).
+    // Excluded: TITLE / RUN_VICTORY / RUN_DEFEAT / RUN_CONTENT_WIP (already menu-state, no pause needed).
     if (keyboard_check_pressed(vk_escape)
         && obj_game.state != "TITLE"
         && obj_game.state != "RUN_VICTORY"
-        && obj_game.state != "RUN_DEFEAT") {
+        && obj_game.state != "RUN_DEFEAT"
+        && obj_game.state != "RUN_CONTENT_WIP") {
         obj_game.ui_overlay_open = OV_PAUSE;
         return;
     }
-    // Phase 1 Batch 5 (D2): TITLE button clicks (SETTINGS / REPLAY TUTORIAL).
+    // Phase 1 Batch 5 (D2): TITLE button clicks.
     if (obj_game.state == "TITLE") {
         _handle_title_click();
     }
@@ -459,27 +1219,13 @@ function _handle_ui_clicks() {
     if (obj_game.state == "PLAYER_WAIT") {
         _handle_pile_click_regions();
     }
-    // Block other handling in TITLE / RUN_VICTORY / RUN_DEFEAT
-    if (obj_game.state != "TITLE"
-        && obj_game.state != "RUN_VICTORY"
-        && obj_game.state != "RUN_DEFEAT") {
-        // Phase 1 Batch 1 (A1 review M1 fix): item bar only clickable during PLAYER_WAIT.
-        // Other states (DEAL/SHUFFLE/REVEAL/JUDGE/DISCARD) have race conditions:
-        //   - draw_extra during DEAL/SHUFFLE concurrently mutates player_draw_pile w/ obj_game Step_0
-        //   - peek_opp_hand during REVEAL fires after opp_play.face_up flipped (no-op or stale)
-        //   - immune_this_round during JUDGE/DISCARD is too late (damage already applied)
-        // PLAYER_WAIT is the only safe window (player free-selecting cards, awaiting DUEL click).
-        if (obj_game.state == "PLAYER_WAIT") {
-            _handle_item_bar_click();
-        }
-    }
     // Phase 1 Batch 6 (F3) cleanup: stale comment block removed. Old Round 3 overlay click
     // handlers (_handle_branch_click / _handle_shop_click / etc) are gone — fully deleted in
     // Phase 2e.4 when the 6 obj_*_mgr subclasses owned their own UI per D56 architecture.
     switch (obj_game.state) {
-        case "PLAYER_WAIT":         _handle_duel_click();     break;   // Sprint 3 Phase 2b.6
         case "RUN_VICTORY":
-        case "RUN_DEFEAT":          _handle_run_end_click();  break;
+        case "RUN_DEFEAT":
+        case "RUN_CONTENT_WIP":     _handle_run_end_click();  break;
     }
 }
 
@@ -501,6 +1247,24 @@ function _duel_btn_rect() {
 /// @desc Sprint 3 Phase 2b.6: DUEL button click handler — commits the currently selected card.
 /// Rect fetched from `_duel_btn_rect()` so click detection stays in sync with Draw_64.
 /// Disabled (no-op) when no card is selected; enabled state drawn as HIGHLIGHT in Draw_64.
+function _discard_btn_rect() {
+    return {
+        x: 1038,
+        y: 430,
+        w: 84,
+        h: 34
+    };
+}
+
+function _handle_discard_mode_click() {
+    var _r = _discard_btn_rect();
+    if (_click_in_rect(_r.x, _r.y, _r.w, _r.h)) {
+        obj_game.ui_active_discard_mode = !obj_game.ui_active_discard_mode;
+        obj_game.selected_card = noone;
+        _play_battle_sfx("card_drag_start");
+    }
+}
+
 function _handle_duel_click() {
     if (obj_game.selected_card == noone) return;
     var _r = _duel_btn_rect();
@@ -526,7 +1290,7 @@ function _ui_per_frame_update() {
     if (room == room0) {
         if (obj_game.state == "TITLE") {
             _play_bgm(bgm_title_screen);
-        } else if (obj_game.state == "RUN_VICTORY" || obj_game.state == "RUN_DEFEAT") {
+        } else if (obj_game.state == "RUN_VICTORY" || obj_game.state == "RUN_DEFEAT" || obj_game.state == "RUN_CONTENT_WIP") {
             _play_bgm(bgm_run_end_win);
         }
     }
@@ -534,9 +1298,44 @@ function _ui_per_frame_update() {
     obj_game.ui_player_hp_display = lerp(obj_game.ui_player_hp_display, obj_game.player_hp, 0.2);
     obj_game.ui_opp_hp_display    = lerp(obj_game.ui_opp_hp_display,    obj_game.opp_hp,    0.2);
     if (obj_game.ui_hp_flash_timer > 0) obj_game.ui_hp_flash_timer--;
+    if (obj_game.ui_hp_flash_player_timer > 0) obj_game.ui_hp_flash_player_timer--;
+    if (obj_game.ui_hp_flash_opp_timer > 0) obj_game.ui_hp_flash_opp_timer--;
     // Phase 1 Batch 2 (C2): hit FX timers tick (decay screen shake + hit flash vignette)
     if (obj_game.ui_screen_shake_timer > 0) obj_game.ui_screen_shake_timer--;
     if (obj_game.ui_hit_flash_timer > 0) obj_game.ui_hit_flash_timer--;
+    if (obj_game.ui_hit_flash_opp_delay > 0) {
+        obj_game.ui_hit_flash_opp_delay--;
+        if (obj_game.ui_hit_flash_opp_delay <= 0) {
+            obj_game.ui_hit_flash_opp_timer = 25;
+            obj_game.ui_screen_shake_timer = max(obj_game.ui_screen_shake_timer, 20);
+        }
+    } else if (obj_game.ui_hit_flash_opp_timer > 0) {
+        obj_game.ui_hit_flash_opp_timer--;
+    }
+    if (obj_game.ui_hit_flash_player_delay > 0) {
+        obj_game.ui_hit_flash_player_delay--;
+        if (obj_game.ui_hit_flash_player_delay <= 0) {
+            obj_game.ui_hit_flash_player_timer = 25;
+            obj_game.ui_screen_shake_timer = max(obj_game.ui_screen_shake_timer, 20);
+        }
+    } else if (obj_game.ui_hit_flash_player_timer > 0) {
+        obj_game.ui_hit_flash_player_timer--;
+    }
+    if (obj_game.ui_duel_result_timer > 0) obj_game.ui_duel_result_timer--;
+    if (array_length(obj_game.ui_damage_events) > 0) {
+        var _damage_next = [];
+        for (var _di = 0; _di < array_length(obj_game.ui_damage_events); _di++) {
+            var _ev = obj_game.ui_damage_events[_di];
+            if (_ev.delay > 0) _ev.delay--;
+            else _ev.timer--;
+            if (_ev.delay > 0 || _ev.timer > 0) array_push(_damage_next, _ev);
+        }
+        obj_game.ui_damage_events = _damage_next;
+    }
+    _relic_tick_ui();
+    with (obj_card) {
+        if (ui_pulse_timer > 0) ui_pulse_timer--;
+    }
     // Reset tooltip target at start of frame; obj_card Step will re-set it if hovered
     obj_game.ui_tooltip_target = noone;
 
@@ -552,7 +1351,7 @@ function _ui_per_frame_update() {
 /// @desc Sprint 3 Phase 2c: shared BG + status bar for all non-battle rooms.
 /// Each obj_*_mgr subclass calls this at the top of its Draw_64 (instead of event_inherited,
 /// which would also draw the placeholder title/hint from the base class).
-/// Draws: dark BG fill + top HUD (HP / Gold / Items / Battle counter) via obj_game data.
+/// Draws: dark BG fill + top HUD (HP / Gold / Relics / Battle counter) via obj_game data.
 function _draw_room_bg_and_status() {
     var _w = display_get_gui_width();
     var _h = display_get_gui_height();
@@ -560,16 +1359,34 @@ function _draw_room_bg_and_status() {
     draw_set_alpha(1);
     draw_set_colour(UI_COLOR_BG);
     draw_rectangle(0, 0, _w, _h, false);
+    draw_set_alpha(0.18);
+    draw_set_colour(UI_COLOR_TABLE_LINE);
+    for (var _grain = 0; _grain < 8; _grain++) {
+        var _gy = 84 + _grain * 78;
+        draw_line_width(0, _gy, _w, _gy + 10 * sin(_grain), 1);
+    }
+    draw_set_alpha(1);
 
     draw_set_font(fnt_score);
     if (instance_exists(obj_game)) {
+        draw_set_alpha(0.72);
+        draw_set_colour(UI_COLOR_BG_MID);
+        draw_rectangle(0, 0, _w, 58, false);
+        draw_set_alpha(1);
+
         draw_set_colour(UI_COLOR_NEUTRAL);
         draw_set_halign(fa_left);
         draw_set_valign(fa_top);
-        draw_text_transformed(20, 20, "HP: " + string(obj_game.player_hp) + "/" + string(obj_game.player_max_hp), 0.4, 0.4, 0);
-        draw_text_transformed(200, 20, "Gold: " + string(obj_game.gold), 0.4, 0.4, 0);
-        draw_text_transformed(340, 20, "Items: " + string(array_length(obj_game.items)) + "/4", 0.4, 0.4, 0);
-        draw_text_transformed(_w - 200, 20, "Battle " + string(obj_game.current_battle_index + 1) + "/6", 0.4, 0.4, 0);
+        var _status_text = "HP " + string(obj_game.player_hp) + "/" + string(obj_game.player_max_hp)
+            + "   Gold " + string(obj_game.gold)
+            + "   Deck " + string(array_length(obj_game.player_deck));
+        draw_text_transformed(18, 15, _status_text, 0.26, 0.26, 0);
+
+        draw_set_halign(fa_right);
+        draw_set_colour(UI_COLOR_DIM);
+        draw_text_transformed(_w - 270, 15, "Battle " + string(obj_game.current_battle_index + 1) + "/" + string(_run_battle_total()), 0.26, 0.26, 0);
+
+        _draw_relic_shelf(_w - 238, 18);
     }
 
     draw_set_halign(fa_left);
@@ -595,18 +1412,18 @@ function _is_card_animating_state() {
 /// overriding Step_0's per-state target_x/y.
 function _update_opp_hand_fan() {
     if (_is_card_animating_state()) return;
+    if (obj_game.state == "TITLE" || obj_game.state == "RUN_VICTORY" || obj_game.state == "RUN_DEFEAT" || obj_game.state == "RUN_CONTENT_WIP") return;
     // 2026-04-26 v3: active count fan (n=2 redistributes to 2-card spread, no mid-gap).
     var _active = [];
-    for (var _oi = 0; _oi < 3; _oi++) {
-        if (obj_game.opp_hand[_oi] != noone) array_push(_active, obj_game.opp_hand[_oi]);
+    for (var _oi = 0; _oi < obj_game.opp_hand_limit; _oi++) {
+        if (obj_game.opp_hand[_oi] != noone && instance_exists(obj_game.opp_hand[_oi])) array_push(_active, obj_game.opp_hand[_oi]);
     }
     var _n = array_length(_active);
     for (var _k = 0; _k < _n; _k++) {
         var _card = _active[_k];
         var _angle_deg;
         if (_n == 1) _angle_deg = 0;
-        else if (_n == 2) _angle_deg = (_k - 0.5) * obj_game.HAND_FAN_ANGLE_DEG;
-        else _angle_deg = (_k - 1) * obj_game.HAND_FAN_ANGLE_DEG;
+        else _angle_deg = (_k - (_n - 1) / 2) * obj_game.HAND_FAN_ANGLE_DEG;
         var _angle_rad = degtorad(_angle_deg);
         var _dx = sin(_angle_rad) * obj_game.HAND_FAN_RADIUS;
         var _dy = cos(_angle_rad) * obj_game.HAND_FAN_RADIUS;   // +cos = downward
@@ -634,10 +1451,12 @@ function _update_plr_hand_fan() {
     // Fan distributes N cards on arc with proper spacing (no mid-gap when 2 cards left).
     var _active = [];
     var _active_to_orig = [];   // map active-index → plr_hand[orig_index]
-    for (var _oi = 0; _oi < 3; _oi++) {
+    for (var _oi = 0; _oi < obj_game.player_hand_limit; _oi++) {
         var _hc = obj_game.plr_hand[_oi];
         if (_hc == noone) continue;
+        if (!instance_exists(_hc)) continue;
         if (_hc == obj_game.selected_card) continue;
+        if (_hc == obj_game.ui_drag_card) continue;
         array_push(_active, _hc);
         array_push(_active_to_orig, _oi);
     }
@@ -648,8 +1467,7 @@ function _update_plr_hand_fan() {
         for (var _k = 0; _k < _n; _k++) {
             var _angle_deg_h;
             if (_n == 1) _angle_deg_h = 0;
-            else if (_n == 2) _angle_deg_h = (_k - 0.5) * obj_game.HAND_FAN_ANGLE_DEG;
-            else _angle_deg_h = (_k - 1) * obj_game.HAND_FAN_ANGLE_DEG;
+            else _angle_deg_h = (_k - (_n - 1) / 2) * obj_game.HAND_FAN_ANGLE_DEG;
             var _angle_rad_h = degtorad(_angle_deg_h);
             var _dx_h = sin(_angle_rad_h) * obj_game.HAND_FAN_RADIUS;
             var _dy_h = -cos(_angle_rad_h) * obj_game.HAND_FAN_RADIUS;
@@ -676,8 +1494,7 @@ function _update_plr_hand_fan() {
         if (obj_game.plr_hand_fan_expanded) {
             var _angle_deg;
             if (_n == 1) _angle_deg = 0;
-            else if (_n == 2) _angle_deg = (_k - 0.5) * obj_game.HAND_FAN_ANGLE_DEG;
-            else _angle_deg = (_k - 1) * obj_game.HAND_FAN_ANGLE_DEG;
+            else _angle_deg = (_k - (_n - 1) / 2) * obj_game.HAND_FAN_ANGLE_DEG;
             var _angle_rad = degtorad(_angle_deg);
             var _dx = sin(_angle_rad) * obj_game.HAND_FAN_RADIUS;
             var _dy = -cos(_angle_rad) * obj_game.HAND_FAN_RADIUS;
@@ -731,6 +1548,16 @@ function _draw_run_end_overlay() {
     draw_set_halign(fa_center);
     draw_set_valign(fa_middle);
     draw_set_font(fnt_score);
+
+    if (obj_game.state == "RUN_CONTENT_WIP") {
+        draw_set_colour(UI_COLOR_HIGHLIGHT);
+        draw_text_transformed(_cx, _cy - 82, "CONTENT IN", 0.9, 0.9, 0);
+        draw_text_transformed(_cx, _cy - 34, "DEVELOPMENT", 0.9, 0.9, 0);
+        draw_set_colour(UI_COLOR_NEUTRAL);
+        draw_text_transformed(_cx, _cy + 20, "More stages are still being made.", 0.28, 0.28, 0);
+        _draw_button(_cx - 120, _cy + 96, 240, 50, "BACK TO TITLE", 0.34);
+        return;
+    }
 
     if (obj_game.state == "RUN_VICTORY") {
         draw_set_colour(UI_COLOR_PLAYER);
@@ -797,13 +1624,10 @@ function _draw_deck_overlay() {
     } else if (_o == OV_DECK_OD) {
         var _enemy = _get_next_or_current_enemy();
         if (!is_undefined(_enemy)) {
-            var _comp = _enemy.deck_composition;
-            var _types = ["rock", "scissors", "paper"];
-            for (var _t = 0; _t < 3; _t++) {
-                var _count = _comp[$ _types[_t]] ?? 0;
-                for (var _ci = 0; _ci < _count; _ci++) {
-                    array_push(_cards_to_show, {card_type: _str_to_card_type_int(_types[_t]), rules: [], display_name: ""});
-                }
+            var _enemy_cards = _enemy_deck_card_structs(_enemy);
+            for (var _ec = 0; _ec < array_length(_enemy_cards); _ec++) {
+                var _card_struct = _enemy_cards[_ec];
+                array_push(_cards_to_show, {card_type: _str_to_card_type_int(_card_struct.type_name), rules: _card_struct.rules, display_name: ""});
             }
         }
     }
@@ -836,13 +1660,11 @@ function _draw_deck_overlay() {
         var _col_i = _i mod _cols;
         var _x = _start_x + _col_i * (_card_w + _gap_x);
         var _y = _start_y + _row * (_card_h + _gap_y);
-        var _spr = spr_card_back;
-        switch (_c.card_type) {
-            case 0: _spr = spr_card_rock;     break;
-            case 1: _spr = spr_card_scissors; break;
-            case 2: _spr = spr_card_paper;    break;
+        _draw_card_face(_c.card_type, _x, _y, _card_w, _card_h, 0, 1, true);
+        var _stamp_n = min(3, array_length(_c.rules));
+        for (var _sr = 0; _sr < _stamp_n; _sr++) {
+            _draw_rule_chip(_c.rules[_sr], _x + _card_w - 18 - _sr * 13, _y + 6, 12);
         }
-        draw_sprite_ext(_spr, 0, _x, _y, _card_w / 99, _card_h / 140, 0, c_white, 1);
         if (_is_mouse_in_rect(_x, _y, _card_w, _card_h)) {
             _hovered_idx = _i;
             draw_set_alpha(0.85);
@@ -875,7 +1697,7 @@ function _draw_deck_overlay() {
             for (var _ri = 0; _ri < array_length(_hc.rules); _ri++) {
                 var _rule = _hc.rules[_ri];
                 var _level_str = (_rule.max_level > 1) ? (" [L" + string(_rule.level) + "/" + string(_rule.max_level) + "]") : "";
-                draw_text_transformed(_tt_x + 8, _yy, "- " + _rule.description_text + _level_str, 0.22, 0.22, 0);
+                draw_text_transformed(_tt_x + 8, _yy, "- " + _t(_rule_display_key(_rule.id)) + _level_str, 0.22, 0.22, 0);
                 _yy += 20;
             }
         }
@@ -956,39 +1778,45 @@ function _draw_card_tooltip(_card) {
     if (!instance_exists(_card)) return;
     if (!_card.face_up) return;
     var _tx = _card.x;
-    var _ty = _card.y - 120;
-    var _w = 220;
-    var _h = 100;
+    var _ty = _card.y - 150;
+    var _w = 330;
+    var _h = 94 + max(0, array_length(_card.rules)) * 28;
     // Clamp within screen
     if (_tx + _w > display_get_gui_width()) _tx = display_get_gui_width() - _w - 10;
     if (_tx < 10) _tx = 10;
     if (_ty < 10) _ty = _card.y + 145;   // flip below if too close to top
 
     draw_set_alpha(0.95);
-    draw_set_colour(UI_COLOR_BG);
+    draw_set_colour(UI_COLOR_BG_MID);
     draw_rectangle(_tx, _ty, _tx + _w, _ty + _h, false);
     draw_set_alpha(1);
-    draw_set_colour(UI_COLOR_PLAYER);
+    draw_set_colour(UI_COLOR_HIGHLIGHT);
     draw_rectangle(_tx, _ty, _tx + _w, _ty + _h, true);
 
     draw_set_halign(fa_left);
     draw_set_valign(fa_top);
     draw_set_font(fnt_score);
     draw_set_colour(c_white);
-    var _name = (_card.display_name != "") ? _card.display_name : "(no name)";
-    draw_text_transformed(_tx + 8, _ty + 6, _name, 0.3, 0.3, 0);
+    var _type_name = _card_type_display_label(_card.card_type);
+    draw_text_transformed(_tx + 12, _ty + 8, _type_name + "  DMG " + string(_get_card_win_damage(_card)), 0.28, 0.28, 0);
 
     if (array_length(_card.rules) == 0) {
         draw_set_alpha(0.6);
-        draw_text_transformed(_tx + 8, _ty + 40, "(no rules)", 0.22, 0.22, 0);
+        draw_text_transformed(_tx + 12, _ty + 42, "(no traits)", 0.22, 0.22, 0);
         draw_set_alpha(1);
     } else {
-        var _yy = _ty + 30;
+        var _yy = _ty + 42;
         for (var i = 0; i < array_length(_card.rules); i++) {
             var _r = _card.rules[i];
             var _level_str = (_r.max_level > 1) ? (" [L" + string(_r.level) + "/" + string(_r.max_level) + "]") : "";
-            draw_text_transformed(_tx + 8, _yy, "• " + _r.description_text + _level_str, 0.2, 0.2, 0);
-            _yy += 18;
+            _draw_rule_chip(_r, _tx + 12, _yy, 22);
+            draw_set_halign(fa_left);
+            draw_set_valign(fa_top);
+            draw_set_colour(UI_COLOR_HIGHLIGHT);
+            draw_text_transformed(_tx + 42, _yy - 2, _t(_rule_display_key(_r.id)) + _level_str, 0.22, 0.22, 0);
+            draw_set_colour(c_white);
+            _draw_text_ext_scaled(_tx + 42, _yy + 16, _t(_r.description_text), 17, _w - 54, 0.18);
+            _yy += 28;
             if (_yy > _ty + _h - 10) break;
         }
     }
@@ -1032,14 +1860,8 @@ function _draw_scry_overlay() {
         var _x = _start_x + i * (_card_w + _spacing) + _card_w / 2;
         var _y = _cy - 20;
 
-        // Card sprite (face-up, by type)
-        var _spr = spr_card_back;
-        switch (_c.card_type) {
-            case 0: _spr = spr_card_rock;     break;
-            case 1: _spr = spr_card_scissors; break;
-            case 2: _spr = spr_card_paper;    break;
-        }
-        draw_sprite_ext(_spr, 0, _x - _card_w / 2, _y - _card_h / 2, 1, 1, 0, c_white, 1);
+        // Card asset (face-up, by type)
+        _draw_card_face(_c.card_type, _x - _card_w / 2, _y - _card_h / 2, _card_w, _card_h, 0, 1, true);
 
         // Display name underneath
         if (_c.display_name != "") {
@@ -1151,7 +1973,7 @@ function _handle_scry_click() {
                 // Cards stay visible in draw_pile after reshuffle.
             }
 
-            _play_sfx(snd_card_move);
+            _play_battle_sfx("shuffle");
             show_debug_message("[scry overlay] picked #" + string(i + 1) + ", reshuffled " + string(_count - 1));
             obj_game.ui_scry_cards = [];
             obj_game.ui_overlay_open = OV_NONE;
@@ -1204,13 +2026,7 @@ function _draw_pile_picker_overlay() {
         var _x = _start_x + _col * (_card_w + _spacing_x);
         var _y = _start_y + _r * (_card_h + _spacing_y);
 
-        var _spr = spr_card_back;
-        switch (_c.card_type) {
-            case 0: _spr = spr_card_rock;     break;
-            case 1: _spr = spr_card_scissors; break;
-            case 2: _spr = spr_card_paper;    break;
-        }
-        draw_sprite_ext(_spr, 0, _x, _y, _card_w / 100, _card_h / 140, 0, c_white, 1);
+        _draw_card_face(_c.card_type, _x, _y, _card_w, _card_h, 0, 1, true);
 
         // Hover highlight
         if (_is_mouse_in_rect(_x, _y, _card_w, _card_h)) {
@@ -1296,7 +2112,7 @@ function _handle_pile_picker_click() {
                 _c.flip_state = 1;
                 _c.flip_to_face = true;
             }
-            _play_sfx(snd_card_move);
+            _play_battle_sfx("card_land_play");
             show_debug_message("[pile picker] took card from " + _target + " idx=" + string(i) + " → hand slot " + string(_slot));
             obj_game.ui_overlay_open = OV_NONE;
             obj_game.ui_pile_picker_target = "";
@@ -1534,59 +2350,8 @@ function _handle_pause_click() {
     }
 }
 
-// ===== 2026-04-26: NEW GAME tutorial-skip confirm overlay =====
-function _draw_new_game_confirm_overlay() {
-    _draw_full_overlay_bg(0.85);
-    var _w = display_get_gui_width();
-    var _h = display_get_gui_height();
-    var _cx = _w / 2;
-    var _cy = _h / 2;
-    draw_set_halign(fa_center);
-    draw_set_valign(fa_middle);
-    draw_set_font(fnt_score);
-    draw_set_colour(UI_COLOR_PLAYER);
-    draw_text_transformed(_cx, _cy - 130, "NEW GAME", 0.9, 0.9, 0);
-    draw_set_colour(UI_COLOR_NEUTRAL);
-    draw_text_transformed(_cx, _cy - 70, "Skip tutorial?", 0.45, 0.45, 0);
-    draw_text_transformed(_cx, _cy - 40, "(Tutorial = 1 practice battle before run starts)", 0.25, 0.25, 0);
-
-    var _btn_w = 240, _btn_h = 50, _btn_gap = 14;
-    _draw_button(_cx - _btn_w / 2, _cy + 10,                              _btn_w, _btn_h, "PLAY TUTORIAL", 0.4);
-    _draw_button(_cx - _btn_w / 2, _cy + 10 + (_btn_h + _btn_gap),        _btn_w, _btn_h, "SKIP TUTORIAL", 0.4);
-    _draw_button(_cx - _btn_w / 2, _cy + 10 + (_btn_h + _btn_gap) * 2,    _btn_w, _btn_h, "CANCEL",        0.4);
-}
-
-function _handle_new_game_confirm_click() {
-    if (!mouse_check_button_pressed(mb_left)) return;
-    var _w = display_get_gui_width();
-    var _h = display_get_gui_height();
-    var _cx = _w / 2;
-    var _cy = _h / 2;
-    var _btn_w = 240, _btn_h = 50, _btn_gap = 14;
-    var _y_play   = _cy + 10;
-    var _y_skip   = _cy + 10 + (_btn_h + _btn_gap);
-    var _y_cancel = _cy + 10 + (_btn_h + _btn_gap) * 2;
-
-    if (_btn_click(_cx - _btn_w / 2, _y_play, _btn_w, _btn_h)) {
-        global.tutorial_done = false;
-        settings_save();
-        _new_game_start_fresh();
-        return;
-    }
-    if (_btn_click(_cx - _btn_w / 2, _y_skip, _btn_w, _btn_h)) {
-        global.tutorial_done = true;
-        settings_save();
-        _new_game_start_fresh();
-        return;
-    }
-    if (_btn_click(_cx - _btn_w / 2, _y_cancel, _btn_w, _btn_h)) {
-        obj_game.ui_overlay_open = OV_NONE;
-        return;
-    }
-}
-
 /// @desc 2026-04-26: shared "fresh run start" — close overlay, destroy any stale instances,
-/// transition to RUN_START with no wait. Used by both PLAY TUTORIAL and SKIP TUTORIAL paths.
+/// transition to RUN_START with no wait.
 function _new_game_start_fresh() {
     _clear_all_card_instances();
     obj_game.ui_overlay_open = OV_NONE;
@@ -1596,12 +2361,14 @@ function _new_game_start_fresh() {
     obj_game.ui_scry_cards = [];
     obj_game.ui_pile_picker_target = "";
     obj_game.selected_card = noone;
+    obj_game.ui_drag_card = noone;
+    obj_game.ui_drag_drop_target = "";
     obj_game.state = "RUN_START";
     obj_game.wait_timer = 0;
 }
 
 // ===== Phase 1 Batch 5 (D2): TITLE button click handler =====
-// Layout mirrors obj_game/Draw_64.gml TITLE block (SETTINGS + REPLAY TUTORIAL stacked below SPACE prompt).
+// Layout mirrors obj_game/Draw_64.gml TITLE block.
 
 function _handle_title_click() {
     if (!mouse_check_button_pressed(mb_left)) return;
@@ -1615,7 +2382,7 @@ function _handle_title_click() {
     var _y_exit     = _btn_y0 + (_btn_h + _btn_gap) * 2;
 
     if (_btn_click(_cx - _btn_w / 2, _y_play, _btn_w, _btn_h)) {
-        obj_game.ui_overlay_open = OV_NEW_GAME_CONFIRM;
+        _new_game_start_fresh();
         return;
     }
     if (_btn_click(_cx - _btn_w / 2, _y_settings, _btn_w, _btn_h)) {

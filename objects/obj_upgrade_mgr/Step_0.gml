@@ -33,21 +33,22 @@ if (keyboard_check_pressed(vk_escape)) {
 if (!mouse_check_button_pressed(mb_left)) exit;
 
 // ===== Candidate rule click =====
-var _cand_y = 180;
-var _cand_h = 180;
+var _cand_y = 118;
+var _cand_h = 154;
+var _cand_w = 300;
 if (_n_candidates == 1) {
     // Single: center rect
-    if (point_in_rectangle(mouse_x, mouse_y, _cx - 140, _cand_y, _cx + 140, _cand_y + _cand_h)) {
+    if (point_in_rectangle(mouse_x, mouse_y, _cx - _cand_w / 2, _cand_y, _cx + _cand_w / 2, _cand_y + _cand_h)) {
         selected_rule_idx = 0;
         selected_target_card_idx = -1;
         exit;
     }
 } else {
-    // Triple: 3 positions at x_centers 350/640/930, each 250w
-    var _cand_xs = [350, 640, 930];
+    // Up to 3 candidates, centered with fixed breathing room.
+    var _cand_xs = [260, 640, 1020];
     for (var i = 0; i < _n_candidates; i++) {
         var _cx_i = _cand_xs[i];
-        if (point_in_rectangle(mouse_x, mouse_y, _cx_i - 125, _cand_y, _cx_i + 125, _cand_y + _cand_h)) {
+        if (point_in_rectangle(mouse_x, mouse_y, _cx_i - _cand_w / 2, _cand_y, _cx_i + _cand_w / 2, _cand_y + _cand_h)) {
             selected_rule_idx = i;
             selected_target_card_idx = -1;
             exit;

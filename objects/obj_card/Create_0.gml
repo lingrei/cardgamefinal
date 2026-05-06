@@ -33,3 +33,23 @@ card_owner = "";
 
 // Round 3: display_name (from CardStruct; flows via _instantiate_card_from_struct)
 display_name = "";
+
+// D69 runtime modifiers/state. These reset when the card instance is recreated for a battle.
+win_damage_bonus = 0;
+drawn_this_turn = false;
+retained_from_previous_turn = false;
+marked_for_discard = false;
+active_discarded_this_turn = false;
+held_turns = 0;
+was_held_last_turn = false;
+cold_box_granted = false;
+discard_route_override = "";
+played_route_override = "";
+ui_pulse_timer = 0;
+ui_outline_color = c_white;
+is_dragging = false;
+drag_offset_x = 0;
+drag_offset_y = 0;
+drag_return_x = x;
+drag_return_y = y;
+drag_return_rotation = 0;

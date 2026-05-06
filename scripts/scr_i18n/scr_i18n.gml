@@ -3,7 +3,7 @@
 // Call i18n_init() once in obj_game Create, before any UI draw.
 
 function i18n_init() {
-    global.current_language = "zh"; // Default, overridden by settings_load() if available
+    global.current_language = "en"; // Default, overridden by settings_load() if available
     global.i18n_dict = {
         zh: {},
         en: {}
@@ -14,25 +14,95 @@ function i18n_init() {
     _i18n_set("rule_beat_paper_desc",        "这张牌对布也能赢。",                                "This card also beats paper.");
     _i18n_set("rule_beat_scissors_desc",     "这张牌对剪刀也能赢。",                              "This card also beats scissors.");
     _i18n_set("rule_high_dmg_on_win_desc",   "胜利时额外造成 1 点伤害, 每级叠加。",                "On win, deal 1 extra damage per level.");
-    _i18n_set("rule_draw_plus_next_turn_desc","出牌后, 下回合多抽 1 张牌。",                       "Next turn, draw 1 extra card.");
     _i18n_set("rule_tie_dmg_desc",           "平局时, 对手受到 1 点伤害。",                       "On tie, opponent takes 1 damage.");
-    _i18n_set("rule_win_gives_item_desc",    "胜利时获得一个随机道具。",                          "On win, gain 1 random item.");
     _i18n_set("rule_return_to_deck_desc",    "出牌后, 重新洗回自己的牌堆。",                      "This card shuffles back into your deck after play.");
     _i18n_set("rule_return_to_deck_top_desc","出牌后, 回到自己牌堆的顶上。",                      "This card returns to the top of your deck after play.");
-    _i18n_set("rule_power_with_usage_desc",  "这张牌每被打出一次, 下次获胜时伤害 +1, 可叠加。",    "This card's win damage grows by 1 each time it's played.");
-    _i18n_set("rule_escalating_damage_desc", "这张牌每赢一局, 下次获胜时伤害 +1, 可叠加。",        "This card's win damage grows by 1 each time it wins.");
+_i18n_set("rule_boost_same_name_on_play_desc", "打出时, 其余同名手牌获胜伤害 +1。", "On play, other same-name hand cards gain +1 win damage.");
 
-    // Item descriptions (10 — D51 only desc, no name)
-    _i18n_set("item_peek_opp_hand_desc",          "随机翻开敌人 1 张牌。",                        "Reveal 1 random enemy card.");
-    _i18n_set("item_draw_extra_desc",             "立即多抽 1 张牌。",                             "Draw 1 extra card this turn.");
-    _i18n_set("item_force_opp_replay_desc",       "替换对手已出的牌：从对手手牌中点击 1 张, 强制改为出这张, 该卡永久公开。", "Swap opp's played card with one you pick from their hand. Chosen card is permanently revealed.");
-    _i18n_set("item_discard_own_hand_desc",       "弃掉 1 张手牌, 本场不再出现。",                "Discard 1 hand card; it's gone for this battle.");
-    _i18n_set("item_steal_from_opp_discard_desc", "从对手弃牌堆拿 1 张到手牌。",                  "Take 1 card from enemy's discard.");
-    _i18n_set("item_recover_from_own_discard_desc","从自己弃牌堆拿回 1 张牌。",                    "Take 1 card from your own discard.");
-    _i18n_set("item_scry_top_3_desc",             "查看自己牌堆顶 3 张, 选 1 张加入手牌。",       "Look at the top 3 of your deck and take 1 into your hand.");
-    _i18n_set("item_reveal_opp_hand_types_desc",  "查看对手的牌型。",                              "Reveal all enemy cards.");
-    _i18n_set("item_immune_this_round_desc",      "本回合不受伤害。",                              "Immune to damage this round.");
-    _i18n_set("item_mulligan_desc",               "弃掉所有手牌, 重新抽 3 张。",                   "Discard your hand and draw 3 new cards.");
+    // Current MVP trait names/descriptions. ASCII fallback keeps HTML export readable until a TTF UI font lands.
+    _i18n_set("rule_unknown_name", "Unknown", "Unknown");
+    _i18n_set("rule_unknown_desc", "Unknown effect.", "Unknown effect.");
+    _i18n_set("rule_beat_rock_name", "Can Beat Rock", "Can Beat Rock");
+    _i18n_set("rule_beat_rock_desc", "Can also beat Rock. If both cards can beat each other, the duel is a tie.", "Can also beat Rock. If both cards can beat each other, the duel is a tie.");
+    _i18n_set("rule_beat_paper_name", "Can Beat Paper", "Can Beat Paper");
+    _i18n_set("rule_beat_paper_desc", "Can also beat Paper. If both cards can beat each other, the duel is a tie.", "Can also beat Paper. If both cards can beat each other, the duel is a tie.");
+    _i18n_set("rule_beat_scissors_name", "Can Beat Scissors", "Can Beat Scissors");
+    _i18n_set("rule_beat_scissors_desc", "Can also beat Scissors. If both cards can beat each other, the duel is a tie.", "Can also beat Scissors. If both cards can beat each other, the duel is a tie.");
+    _i18n_set("rule_high_dmg_on_win_name", "Win +1", "Win +1");
+    _i18n_set("rule_high_dmg_on_win_desc", "On win, deal +1 damage per level.", "On win, deal +1 damage per level.");
+    _i18n_set("rule_tie_dmg_name", "Tie Scratch", "Tie Scratch");
+    _i18n_set("rule_tie_dmg_desc", "On tie, deal 1 damage.", "On tie, deal 1 damage.");
+    _i18n_set("rule_boost_same_name_on_play_name", "Echo Hand", "Echo Hand");
+    _i18n_set("rule_boost_same_name_on_play_desc", "When played, other same-type hand cards gain +1 damage.", "When played, other same-type hand cards gain +1 damage.");
+    _i18n_set("rule_return_to_deck_name", "Return", "Return");
+    _i18n_set("rule_return_to_deck_desc", "After play, shuffle this card back into your deck.", "After play, shuffle this card back into your deck.");
+    _i18n_set("rule_return_to_deck_top_name", "Top Return", "Top Return");
+    _i18n_set("rule_return_to_deck_top_desc", "After play, put this card on top of your deck.", "After play, put this card on top of your deck.");
+    _i18n_set("rule_discard_peek_enemy_name", "Discard Peek", "Discard Peek");
+    _i18n_set("rule_discard_peek_enemy_desc", "When discarded, reveal 1 enemy hand card.", "When discarded, reveal 1 enemy hand card.");
+    _i18n_set("rule_draw_peek_enemy_name", "Draw Peek", "Draw Peek");
+    _i18n_set("rule_draw_peek_enemy_desc", "When drawn, reveal 1 enemy hand card.", "When drawn, reveal 1 enemy hand card.");
+    _i18n_set("rule_held_start_peek_enemy_name", "Held Eye", "Held Eye");
+    _i18n_set("rule_held_start_peek_enemy_desc", "At turn start while held, reveal 1 enemy hand card.", "At turn start while held, reveal 1 enemy hand card.");
+    _i18n_set("rule_held_discard_peek_enemy_name", "Watch Discard", "Watch Discard");
+    _i18n_set("rule_held_discard_peek_enemy_desc", "While held, when you discard another card, reveal 1 enemy hand card.", "While held, when you discard another card, reveal 1 enemy hand card.");
+    _i18n_set("rule_discard_draw_one_name", "Discard Draw", "Discard Draw");
+    _i18n_set("rule_discard_draw_one_desc", "When discarded, draw 1 card.", "When discarded, draw 1 card.");
+    _i18n_set("rule_draw_chain_one_name", "Draw Chain", "Draw Chain");
+    _i18n_set("rule_draw_chain_one_desc", "When drawn, draw 1 extra card.", "When drawn, draw 1 extra card.");
+    _i18n_set("rule_held_refill_limit_plus_one_name", "Wide Hand", "Wide Hand");
+    _i18n_set("rule_held_refill_limit_plus_one_desc", "While held, refill limit is +1.", "While held, refill limit is +1.");
+    _i18n_set("rule_held_win_damage_growth_name", "Seasoned", "Seasoned");
+    _i18n_set("rule_held_win_damage_growth_desc", "Each turn held, this card gains +1 damage.", "Each turn held, this card gains +1 damage.");
+    _i18n_set("rule_any_active_discard_growth_name", "Discard Hunger", "Discard Hunger");
+    _i18n_set("rule_any_active_discard_growth_desc", "While held, any active discard gives this card +1 damage.", "While held, any active discard gives this card +1 damage.");
+    _i18n_set("rule_held_random_trait_name", "Ink Bloom", "Ink Bloom");
+    _i18n_set("rule_held_random_trait_desc", "At turn start while held, gain 1 random trait.", "At turn start while held, gain 1 random trait.");
+    _i18n_set("rule_feed_on_prey_name", "Feed", "Feed");
+    _i18n_set("rule_feed_on_prey_desc", "When you discard a card this beats, gain +1 damage.", "When you discard a card this beats, gain +1 damage.");
+    _i18n_set("rule_shed_weakness_name", "Shed", "Shed");
+    _i18n_set("rule_shed_weakness_desc", "When you discard a card that beats this, gain +1 damage.", "When you discard a card that beats this, gain +1 damage.");
+    _i18n_set("rule_same_type_fuel_name", "Same Fuel", "Same Fuel");
+    _i18n_set("rule_same_type_fuel_desc", "When you discard a same-type card, gain +1 damage.", "When you discard a same-type card, gain +1 damage.");
+    _i18n_set("rule_discard_to_topdeck_name", "Topdeck", "Topdeck");
+    _i18n_set("rule_discard_to_topdeck_desc", "When discarded, put this card on top of your deck instead.", "When discarded, put this card on top of your deck instead.");
+
+    _i18n_set("relic_unknown_name", "Unknown Relic", "Unknown Relic");
+    _i18n_set("relic_unknown_desc", "Unknown relic.", "Unknown relic.");
+    _i18n_set("relic_ember_furnace_name", "Ember Furnace", "Ember Furnace");
+    _i18n_set("relic_ember_furnace_desc", "After your first discard each turn, the next card that beats it gains +2 damage.", "After your first discard each turn, the next card that beats it gains +2 damage.");
+    _i18n_set("relic_ballast_stone_name", "Ballast Stone", "Ballast Stone");
+    _i18n_set("relic_ballast_stone_desc", "At turn start, your longest-held hand card gains +1 damage. It also deals 1 on tie.", "At turn start, your longest-held hand card gains +1 damage. It also deals 1 on tie.");
+    _i18n_set("relic_copy_seal_name", "Copy Seal", "Copy Seal");
+    _i18n_set("relic_copy_seal_desc", "When you play a card, each same-type hand card gives it +1 damage.", "When you play a card, each same-type hand card gives it +1 damage.");
+    _i18n_set("relic_shuffle_funnel_name", "Shuffle Funnel", "Shuffle Funnel");
+    _i18n_set("relic_shuffle_funnel_desc", "Your first discard each turn draws 1 card.", "Your first discard each turn draws 1 card.");
+    _i18n_set("relic_cold_box_name", "Cold Box", "Cold Box");
+    _i18n_set("relic_cold_box_desc", "Once per battle per card, after 2 held turns, gain 1 trait.", "Once per battle per card, after 2 held turns, gain 1 trait.");
+    _i18n_set("relic_predator_totem_name", "Predator Totem", "Predator Totem");
+    _i18n_set("relic_predator_totem_desc", "When you discard a card, hand cards that beat it gain +1 damage.", "When you discard a card, hand cards that beat it gain +1 damage.");
+    _i18n_set("relic_observation_mirror_name", "Observation Mirror", "Observation Mirror");
+    _i18n_set("relic_observation_mirror_desc", "Whenever you reveal enemy hand cards, a random hand card gains +1 damage.", "Whenever you reveal enemy hand cards, a random hand card gains +1 damage.");
+    _i18n_set("relic_buffer_ring_name", "Buffer Ring", "Buffer Ring");
+    _i18n_set("relic_buffer_ring_desc", "Ties trigger win effects, but deal no duel damage.", "Ties trigger win effects, but deal no duel damage.");
+    _i18n_set("relic_tri_compass_name", "Tri-Compass", "Tri-Compass");
+    _i18n_set("relic_tri_compass_desc", "If your hand has Rock, Scissors, and Paper, your played card gains +1 damage.", "If your hand has Rock, Scissors, and Paper, your played card gains +1 damage.");
+    _i18n_set("relic_lone_blade_name", "Lone Blade", "Lone Blade");
+    _i18n_set("relic_lone_blade_desc", "If you play the only hand card of its type, it gains +2 damage.", "If you play the only hand card of its type, it gains +2 damage.");
+    _i18n_set("relic_zealot_mask_name", "Zealot Mask", "Zealot Mask");
+    _i18n_set("relic_zealot_mask_desc", "At battle start, your most common card type gains +1 damage.", "At battle start, your most common card type gains +1 damage.");
+    _i18n_set("relic_balance_scales_name", "Balance Scales", "Balance Scales");
+    _i18n_set("relic_balance_scales_desc", "At battle start, your least common card type gains +2 damage.", "At battle start, your least common card type gains +2 damage.");
+    _i18n_set("relic_backlight_lamp_name", "Backlight Lamp", "Backlight Lamp");
+    _i18n_set("relic_backlight_lamp_desc", "When the enemy plays a card you had seen, your card gains +2 damage.", "When the enemy plays a card you had seen, your card gains +2 damage.");
+    _i18n_set("relic_blind_die_name", "Blind Die", "Blind Die");
+    _i18n_set("relic_blind_die_desc", "When you beat an unseen enemy card, gain +2 damage.", "When you beat an unseen enemy card, gain +2 damage.");
+    _i18n_set("relic_lag_clock_name", "Lag Clock", "Lag Clock");
+    _i18n_set("relic_lag_clock_desc", "At turn end, if you did not discard, all hand cards gain +1 damage.", "At turn end, if you did not discard, all hand cards gain +1 damage.");
+    _i18n_set("relic_card_spark_name", "Card Spark", "Card Spark");
+    _i18n_set("relic_card_spark_desc", "Your first discard each turn gives a random hand card +1 damage.", "Your first discard each turn gives a random hand card +1 damage.");
+    _i18n_set("relic_protective_knot_name", "Protective Knot", "Protective Knot");
+    _i18n_set("relic_protective_knot_desc", "Once per battle, your first loss becomes a tie.", "Once per battle, your first loss becomes a tie.");
 
     // UI common words (D51 保留)
     _i18n_set("ui_shop",         "商店",  "SHOP");
@@ -64,7 +134,6 @@ function i18n_init() {
     _i18n_set("ui_pause",            "暂停",         "PAUSED");
     _i18n_set("ui_resume",           "继续游戏",     "RESUME");
     _i18n_set("ui_quit_to_title",    "返回主菜单",   "QUIT TO TITLE");
-    _i18n_set("ui_replay_tutorial",  "重玩教程",     "REPLAY TUTORIAL");
     _i18n_set("ui_volume_master",    "主音量",       "MASTER VOLUME");
     _i18n_set("ui_volume_sfx",       "音效",         "SFX VOLUME");
     _i18n_set("ui_volume_music",     "音乐",         "MUSIC VOLUME");

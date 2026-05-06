@@ -34,11 +34,13 @@ if (_deck_size <= 1) {
 }
 
 // ===== Fan deck =====
+var _hovered_card_for_tip = -1;
 for (var i = 0; i < array_length(fan_positions); i++) {
     var _p = fan_positions[i];
     var _card = obj_game.player_deck[i];
     var _is_hover = (hovered_card_idx == i) && (_deck_size > 1);
     var _is_selected = (selected_card_idx == i);
+    if (_is_hover) _hovered_card_for_tip = i;
 
     var _cx_card = _p.x;
     var _cy_card = _p.y;
@@ -48,16 +50,9 @@ for (var i = 0; i < array_length(fan_positions); i++) {
         _cy_card -= cos(_ang_rad) * fan_hover_pop;
     }
 
-    var _spr = spr_card_back;
-    switch (_card.type_name) {
-        case "rock":     _spr = spr_card_rock; break;
-        case "scissors": _spr = spr_card_scissors; break;
-        case "paper":    _spr = spr_card_paper; break;
-    }
-
     var _alpha = (_deck_size <= 1) ? 0.5 : 1.0;
     draw_set_alpha(_alpha);
-    draw_sprite_stretched(_spr, 0, _cx_card - fan_card_w / 2, _cy_card - fan_card_h / 2, fan_card_w, fan_card_h);
+    _draw_card_face(_card.type_name, _cx_card - fan_card_w / 2, _cy_card - fan_card_h / 2, fan_card_w, fan_card_h, 0, _alpha, true);
 
     // Selection / hover border
     if (_is_selected) {
@@ -74,16 +69,20 @@ for (var i = 0; i < array_length(fan_positions); i++) {
                        _cx_card + fan_card_w / 2 + 2, _cy_card + fan_card_h / 2 + 2, true);
     }
 
-    // Existing rule count badge
+    // Existing trait stamps
     if (array_length(_card.rules) > 0) {
         draw_set_alpha(1);
-        draw_set_colour(UI_COLOR_PLAYER);
-        draw_set_halign(fa_right);
-        draw_set_valign(fa_top);
-        draw_text_transformed(_cx_card + fan_card_w / 2 - 5, _cy_card - fan_card_h / 2 + 3, "+" + string(array_length(_card.rules)), 0.3, 0.3, 0);
+        var _stamp_n = min(3, array_length(_card.rules));
+        for (var _ri = 0; _ri < _stamp_n; _ri++) {
+            _draw_rule_chip(_card.rules[_ri], _cx_card + fan_card_w / 2 - 24 - _ri * 16, _cy_card - fan_card_h / 2 + 6, 14);
+        }
     }
 
     draw_set_alpha(1);
+}
+
+if (_hovered_card_for_tip >= 0) {
+    _draw_card_struct_tooltip(obj_game.player_deck[_hovered_card_for_tip], mouse_x + 18, mouse_y + 18);
 }
 
 // ===== CANCEL (LEAVE) / CONFIRM buttons =====
